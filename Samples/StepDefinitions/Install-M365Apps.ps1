@@ -112,7 +112,7 @@ else{
 }
 
 $SourceDir = Get-Location
-$M365Cache = "C:\windows\Temp\M365_Cache" #Sets Registry Location used for Toast Notification
+$M365Cache = "C:\windows\Temp\M365_Cache"
 $ScriptVer = "25.08.28.01"
 
 
