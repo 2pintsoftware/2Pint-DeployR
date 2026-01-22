@@ -598,13 +598,20 @@ SELECT @dbName AS ActualDbName, CASE WHEN @dbName IS NULL THEN 0 ELSE 1 END AS D
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
 $TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting_PreReqs.log"
+$InstalledAppsFilePath = "$TempFolder\InstalledApps.log"
 if (Test-Path -Path $TranscriptFilePath) {
     Remove-Item -Path $TranscriptFilePath -Force
-}   
+}
+if (Test-Path -Path $InstalledAppsFilePath) {
+    Remove-Item -Path $InstalledAppsFilePath -Force
+}    
 Start-Transcript -Path $TranscriptFilePath -Force
 
 # Executing Script
 Write-Host "=========================================================================" -ForegroundColor DarkGray
+
+#Generate Log of Installed Apps
+Get-InstalledApps | Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 #Test if Applications are installed
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
 
@@ -1346,26 +1353,26 @@ if ($IISMimeTypeUpdateRequired) {
         #Set the MIME types for the iPXE boot files, etc. 
         Import-Module WebAdministration
         #EFI loader files  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.efi';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.efi';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #BIOS boot loaders  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.com';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.com';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #BIOS loaders without F12 key press  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.n12';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.n12';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the boot.sdi file  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.sdi';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.sdi';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the boot.bcd boot configuration files  & BCD file (with no extension)
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.bcd';mimeType='application/octet-stream'}
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.';mimeType='application/octet-stream'}   
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.bcd';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the winpe images itself (already added on newer/patched versions of Windows Server
         #Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.wim';mimeType='application/octet-stream'}  
         #for the iPXE BIOS loader files  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.pxe';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.pxe';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the UNDIonly version of iPXE  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.kpxe';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.kpxe';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the .iso file type
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.iso';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.iso';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the .img file type
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.img';mimeType='application/octet-stream'}  
+        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.img';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
         #For the .ipxe file 
         Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.ipxe';mimeType='text/plain'}
         Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
