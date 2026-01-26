@@ -614,6 +614,8 @@ Write-Host "====================================================================
 Get-InstalledApps | Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 #Test if Applications are installed
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
+$installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "SDK"}
+$installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "AppHost"}
 
 #Testing Specific Applications
 #$installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -match "PowerShell 7"}
