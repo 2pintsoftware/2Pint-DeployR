@@ -197,7 +197,19 @@ function Get-InstalledApps
         'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
         )
     }
-    Get-ItemProperty $regpath | .{process{if($_.DisplayName -and $_.UninstallString) { $_ } }} | Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString |Sort DisplayName
+    
+    # Get all installed apps, filter out those without InstallDate, and keep only the latest version of each
+    $allApps = Get-ItemProperty $regpath | .{process{if($_.DisplayName -and $_.UninstallString) { $_ } }} | 
+        Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString
+    
+    # Filter out apps without InstallDate and group by DisplayName to keep only the latest
+    $filteredApps = $allApps | Where-Object { $_.InstallDate -and $_.InstallDate -ne '' } | 
+        Group-Object -Property DisplayName | 
+        ForEach-Object {
+            $_.Group | Sort-Object -Property InstallDate -Descending | Select-Object -First 1
+        }
+    
+    return $allApps | Sort-Object DisplayName
 }
 
 function Set-SqlServerPermissions {
@@ -611,7 +623,9 @@ Start-Transcript -Path $TranscriptFilePath -Force
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 
 #Generate Log of Installed Apps
-Get-InstalledApps | Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
+$LogApps = Get-InstalledApps
+$LogApps | ForEach-Object { $_; "----------------------------------------------------" }| Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
+
 #Test if Applications are installed
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
 $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "SDK"}
@@ -634,10 +648,10 @@ foreach ($app in $PreReqApps) {
             #Write-Host "Multiple versions of $($app.Title) found:" -ForegroundColor Yellow
             #$found | Select-Object -Unique DisplayName | ForEach-Object { Write-Host " - $($_.DisplayName) Version: $($_.DisplayVersion)" -ForegroundColor Yellow }
             foreach ($appitem in $found) {
-                $Version = $found.DisplayVersion
+                $Version = $appitem.DisplayVersion
                 if ($app.Url -match "dotnet"){
-                    Write-Host "Testing $($found.DisplayName)"
-                    if ($found.DisplayName -match "\d+\.\d+\.\d+") {
+                    #Write-Host "Testing $($appitem.DisplayName)"
+                    if ($appitem.DisplayName -match "\d+\.\d+\.\d+") {
                         $Version = $matches[0]
                         #Write-Host "   Found .NET version: $Version" -ForegroundColor DarkGray
                     }
@@ -690,6 +704,19 @@ foreach ($app in $PreReqApps) {
     }
 }
 #Display App Status, Green Arrow next to Installed Apps and Red X next to Missing Apps
+
+# Deduplicate by title, prefer entries with InstallDate and the latest date
+$PreReqAppsStatus = $PreReqAppsStatus |
+    Group-Object -Property Title |
+    ForEach-Object {
+        $withDate = $_.Group | Where-Object { $_.InstallDate }
+        if ($withDate) {
+            $withDate | Sort-Object {[int]$_.InstallDate} -Descending | Select-Object -First 1
+        }
+        else {
+            $_.Group | Select-Object -First 1
+        }
+    }
 
 foreach ($app in $PreReqAppsStatus) {
     
