@@ -25,6 +25,7 @@ Change Log
 - 2025.10.22 - Updated .NET version to 8.0.21
 - 2025.10.29 - Updated PowerShell version to 7.4.13
 - 2025.10.29 - Added SQL Permissions checks for NT AUTHORITY\SYSTEM
+- 2026.01.26 - Updated script to handle when it finds multiple installed versions of .net Software in registry
 
 
 To DO
