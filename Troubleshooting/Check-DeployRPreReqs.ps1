@@ -26,6 +26,8 @@ Change Log
 - 2025.10.29 - Updated PowerShell version to 7.4.13
 - 2025.10.29 - Added SQL Permissions checks for NT AUTHORITY\SYSTEM
 - 2026.01.26 - Updated script to handle when it finds multiple installed versions of .net Software in registry
+- 2026.01.27 - Updated C++ Name to Microsoft Visual C++ v14 Redistributable (x64) to match MS new naming
+- 2026.01.27 - Add DeployR Registry Log File
 
 
 To DO
@@ -49,7 +51,7 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; ; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
 [PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
 [PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
-[PSCustomObject]@{Title = 'Microsoft Visual C++ 2015-2022 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
+[PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
 [PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false}
 [PSCustomObject]@{Title = '2Pint Software StifleR Server'; Installed = $false}
 [PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false}
@@ -1061,7 +1063,17 @@ if ($Installed_2Pint_Software_DeployR){
     
     $RegPath = "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
     $DeployRRegData = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
-    
+    write-host "DeployR Information from Registry:" -ForegroundColor Cyan
+    if ($DeployRRegData){
+        #Export to file for logging
+        $DeployRRegData | Out-File -FilePath "$TempFolder\DeployR_Registry_Info.log" -Force -Encoding UTF8
+    }
+    if ($DeployRRegData -and $DeployRRegData.ContentLocation) {
+        Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
+    }
+    else {
+        Write-Host " DeployR ContentLocation is NOT found in Registry." -ForegroundColor Red
+    }
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
