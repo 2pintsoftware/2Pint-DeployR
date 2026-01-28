@@ -1,7 +1,7 @@
 <#
-Grab the DeployR Registry Key info to get Path Information
+Grab the DeployR information along with some general system information for troubleshooting.
 Grab several logs and package them into a zip file for troubleshooting
-
+Ideally run the Check-DeployRPreReqs.ps1 script first to pull additional logs that will be included in the output of the zip file this script creates.
 
 #>
 
