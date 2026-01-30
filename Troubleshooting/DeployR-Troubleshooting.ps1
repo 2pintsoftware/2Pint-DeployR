@@ -52,10 +52,11 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
 [PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
 [PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
-[PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false}
-[PSCustomObject]@{Title = '2Pint Software StifleR Server'; Installed = $false}
-[PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false}
-[PSCustomObject]@{Title = '2Pint Software StifleR WmiAgent'; Installed = $false}
+[PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/deployr'}
+[PSCustomObject]@{Title = '2Pint Software StifleR Server'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
+[PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
+[PSCustomObject]@{Title = '2Pint Software StifleR WmiAgent'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
+[PSCustomObject]@{Title = '2Pint Software StifleR ActionHub'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 )
 $FirewallRules = @(
 [PSCustomObject]@{DisplayName = '2Pint DeployR HTTPS 7281'; Port = 7281; Protocol = 'TCP'}
@@ -664,6 +665,7 @@ foreach ($app in $PreReqApps) {
                     Title       = $app.Title
                     Installed   = $true
                     URL         = $app.URL
+                    Notes       = $app.Notes
                     InstallDate = $appitem.InstallDate
                     Version     = $Version
                     DisplayName = $appitem.DisplayName
@@ -685,6 +687,7 @@ foreach ($app in $PreReqApps) {
                 Title       = $app.Title
                 Installed   = $true
                 URL         = $app.URL
+                Notes       = $app.Notes
                 InstallDate = $found.InstallDate
                 Version     = $Version
                 DisplayName = $found.DisplayName
@@ -728,15 +731,24 @@ foreach ($app in $PreReqAppsStatus) {
             Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
             Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
             Write-Host "   Minimum Required Version: $($app.MinVersion)" -ForegroundColor DarkGray
+            if ($app.Notes) {
+                Write-Host "   $($app.Notes)" -ForegroundColor DarkGray
+            }
         }
         else {
             Write-Host " ✓  $($app.Title)  " -ForegroundColor Green
             Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
             Write-Host "   Display Name: $($app.DisplayName)" -ForegroundColor DarkGray
+            if ($app.Notes) {
+                Write-Host "   $($app.Notes)" -ForegroundColor DarkGray
+            }
         }
     }
     else {
         Write-Host " ✗  $($app.Title)" -ForegroundColor Red
+        if ($app.Notes) {
+                Write-Host " $($app.Notes)" -ForegroundColor Red
+        }
     }
 }
 
@@ -775,6 +787,10 @@ if ($MissingApps) {
         if ($app.URL) {
             Write-Host "   Download URL: $($app.URL)" -ForegroundColor DarkGray
         }
+        if ($app.Notes) {
+            Write-Host "   $($app.Notes)" -ForegroundColor Red
+        }
+        
     }
     Write-Host "Please install the missing applications and re-run this script." -ForegroundColor Yellow
     Write-Host "=========================================================================" -ForegroundColor DarkGray
