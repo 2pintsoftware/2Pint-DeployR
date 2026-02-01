@@ -1088,7 +1088,12 @@ if ($Installed_2Pint_Software_DeployR){
         Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
     }
     else {
-        Write-Host " DeployR ContentLocation is NOT found in Registry." -ForegroundColor Red
+        if (Test-Path "$env:ProgramData\2Pint Software\DeployR\Content") {
+            Write-Host " DeployR ContentLocation (Default): $env:ProgramData\2Pint Software\DeployR" -ForegroundColor Yellow
+        }
+        else {
+            Write-Host " DeployR ContentLocation is NOT found in Registry and not in Default Location." -ForegroundColor Red
+        }
     }
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
