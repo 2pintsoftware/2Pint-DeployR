@@ -28,6 +28,7 @@ Change Log
 - 2026.01.26 - Updated script to handle when it finds multiple installed versions of .net Software in registry
 - 2026.01.27 - Updated C++ Name to Microsoft Visual C++ v14 Redistributable (x64) to match MS new naming
 - 2026.01.27 - Add DeployR Registry Log File
+- 2026.02.02 - Added ADK Version Check.  I've ad
 
 
 To DO
@@ -39,6 +40,7 @@ To DO
 #Keep this updated as needed 
 $DotNetMinVersion = '8.0.21'
 $PowerShellMinVersion = '7.4.13'
+$ADKVersion = '10.1.26100.2454'
 
 
 
@@ -47,8 +49,8 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'Microsoft .NET Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft Windows Desktop Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft ASP.NET Core'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
-[PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; ; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment'; Installed = $false; MinVersion = $ADKVersion; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
 [PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
 [PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
 [PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
@@ -773,7 +775,18 @@ $PowerShellVersionInstalled = $installedApps | Where-Object { $_.DisplayName -ma
         }
     }
 }
-
+#Double Check ADK = $ADKVersion is installed
+$PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deployment Kit Windows Preinstallation Environment" } | ForEach-Object {
+    if ($_.Installed) {
+        if ($_.Version -ne $ADKVersion) {
+            Write-Host "=========================================================================" -ForegroundColor Red
+            Write-Host "✗ Windows ADK version is different than the required version." -ForegroundColor Red
+            Write-Host "   Installed Version: $($_.Version)" -ForegroundColor DarkGray
+            Write-Host "   Required  Version: $ADKVersion" -ForegroundColor DarkGray
+            Write-Host "=========================================================================" -ForegroundColor Red
+        }
+    }
+}
 
 
 $MissingApps = $PreReqAppsStatus | Where-Object { $_.Installed -eq $false }
