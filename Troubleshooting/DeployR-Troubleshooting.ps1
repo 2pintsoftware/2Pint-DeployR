@@ -1320,7 +1320,7 @@ foreach ($FirewallRule in $FirewallRules){
         Write-Host "No matching ports found for Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor Red
     }
 }
-
+#Check StifleR Infrastructure Approval for DeployR if StifleR Wmi Agent is installed
 if ($Installed_2Pint_Software_StifleR_WmiAgent) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     write-host "Checking for StifleR Infrastructure Approval for DeployR" -ForegroundColor Cyan
