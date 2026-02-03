@@ -42,7 +42,11 @@ $DotNetMinVersion = '8.0.21'
 $PowerShellMinVersion = '7.4.13'
 $ADKVersion = '10.1.26100.2454'
 
-
+# Check for Administrator role
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script must be run as Administrator."
+    exit 1
+}
 
 #PowerShell Table of Pre-Req Applications:
 $PreReqApps = @(
