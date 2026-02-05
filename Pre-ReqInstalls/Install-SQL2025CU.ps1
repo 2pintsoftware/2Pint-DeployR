@@ -13,7 +13,7 @@ Function Update-SQL2025CU {
     # Extract CU version from the page title or description
     $title = $response.ParsedHtml.title
     
-    Write-Host "Latest SQL Server 2022 CU info:"
+    Write-Host "Latest SQL Server 2025 CU info:"
     Write-Host "Title: $title"
     if ($downloadLink) {
         Write-Host "Download URL: $($downloadLink.href)"
