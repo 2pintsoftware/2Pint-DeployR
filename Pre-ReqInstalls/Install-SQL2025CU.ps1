@@ -49,5 +49,5 @@ function Get-InstalledApps
 }
 
 Get-InstalledApps | Where-Object { $_.DisplayName -like "*$AppName*" } | Select-Object -Property "DisplayName", "DisplayVersion"
-Update-SQL2022CU
+Update-SQL2025CU
 Get-InstalledApps | Where-Object { $_.DisplayName -like "*$AppName*" } | Select-Object -Property "DisplayName", "DisplayVersion"

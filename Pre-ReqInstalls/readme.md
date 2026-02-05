@@ -1,6 +1,8 @@
 # DeployR Pre-Req Install Scripts
 
 This folder will contain scripts to automate the installation of Pre-reqs
+You can open the script and paste them into your environment, or run the powershell command listed under the script directly in Elevated PowerShell console: iex (irm URL to script)
+
 
 ## Order
 
@@ -31,3 +33,9 @@ This folder will contain scripts to automate the installation of Pre-reqs
 - DeployR
 - StifleR WMIAgent | OPTIONAL
 - StifleR ActionHub | OPTIONAL
+
+
+## In Action
+
+![WinFeatures](./media/WinFeatures.png)
+
