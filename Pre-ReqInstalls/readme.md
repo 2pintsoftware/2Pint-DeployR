@@ -3,7 +3,6 @@
 This folder will contain scripts to automate the installation of Pre-reqs
 You can open the script and paste them into your environment, or run the powershell command listed under the script directly in Elevated PowerShell console: iex (irm URL to script)
 
-
 ## Order
 
 - Install-PowerShell74X.ps1
@@ -30,6 +29,10 @@ You can open the script and paste them into your environment, or run the powersh
   
 ## 2Pint Software Installs
 
+This software is available to 2Pint Software DeployR Customers, if you don't have access to the downloads, reach out to your sales representative, or send an email to <support@2pintsoftware.com>.
+
+For a DeployR Server, this would be the install order of 2Pint Software components:
+
 - 2PXE
 - iPXE WS
 - StifleR Server
@@ -37,7 +40,6 @@ You can open the script and paste them into your environment, or run the powersh
 - DeployR
 - StifleR WMIAgent | OPTIONAL
 - StifleR ActionHub | OPTIONAL
-
 
 ## In Action
 
