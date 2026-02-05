@@ -41,6 +41,12 @@ You can open the script and paste them into your environment, or run the powersh
 
 ## In Action
 
+Here are a couple captures from running in the elevated PS Console:
+
 ![WinFeatures](./media/WinFeatures.png)
 
 ![SQL2025CU](./media/SQL2025CU.png)
+
+After, you should have all your pre-reqs
+
+![Programs](./media/Programs.png)
