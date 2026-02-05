@@ -6,6 +6,8 @@ You can open the script and paste them into your environment, or run the powersh
 
 ## Order
 
+- Install-PowerShell74X.ps1
+  - iex (irm <https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Pre-ReqInstalls/Install-PowerShell74X.ps1>)
 - Install-WinFeatures.ps1
   - iex (irm <https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Pre-ReqInstalls/Install-WinFeatures.ps1>)
 - Install-SQLExpress2025.ps1
@@ -39,3 +41,4 @@ You can open the script and paste them into your environment, or run the powersh
 
 ![WinFeatures](./media/WinFeatures.png)
 
+![SQL2025CU](./media/SQL2025CU.png)
