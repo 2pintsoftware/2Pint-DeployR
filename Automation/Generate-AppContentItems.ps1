@@ -1,4 +1,5 @@
 <#
+DON't RUN IN ISE!  USE a REAL PowerShell Terminal or VSCode & PS7
 
 CURRENT ISSUES:
 GreenShot hangs and waits for user input
@@ -20,12 +21,19 @@ VLC is saying it's a 16bit app, so check the download
 .NOTES
     Author: Gary Blok
     Date: November 3, 2025
+
+    Updates
+    26.2.12 - Added Admin Check
 #>
 
 # Configure root download path
 $RootPath = "D:\DeployRSources\Applications"
 
-
+# Check for Administrator role
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script must be run as Administrator."
+    exit 1
+}
 
 #region Functions
 function Connect-ToDeployR {
