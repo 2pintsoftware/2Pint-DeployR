@@ -26,18 +26,48 @@ VLC is saying it's a 16bit app, so check the download
 $RootPath = "D:\DeployRSources\Applications"
 
 
-if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
-    Write-Host "DeployR.Utility module found."
-    Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
-    #Set-DeployRHost "http://localhost:7282"
-    $Passcode = (Get-Item -path 'HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings').GetValue("ClientPasscode")
-    Connect-DeployR -Passcode $Passcode -ErrorAction Stop
-    $AllApps = Get-DeployRApplication
 
-} else {
-    Write-Host "DeployR.Utility module not found. Please Where DeployR Server is installed to and update paths."
-}
 #region Functions
+function Connect-ToDeployR {
+    try {
+        if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
+            Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility' -ErrorAction Stop
+        }
+        elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
+            Import-Module DeployR.Utility -ErrorAction Stop
+        }
+        else {
+            throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
+        }
+        
+        Write-Host "Connecting to DeployR..." -ForegroundColor Cyan
+        Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
+        
+        if (Test-Path "HKLM:\software\2Pint Software\DeployR\GeneralSettings") {
+            $DeployRReg = Get-Item -Path "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
+            $ClientPasscode = $DeployRReg.GetValue("ClientPasscode")
+            Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
+        }
+        elseif (Test-Path "D:\DeployRPasscode.txt") {
+            $ClientPasscode = (Get-Content "D:\DeployRPasscode.txt" -Raw)
+            Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
+        }
+        else {
+            throw "Cannot find DeployR Client Passcode in registry or D:\DeployRPasscode.txt"
+            Connect-DeployR
+        }
+        
+        Write-Host "Connected to DeployR" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Error "Failed to connect to DeployR: $_"
+        return $false
+    }
+}
+
+
+
 #Function to Create Apps in DeployR
 Function New-DeployRApp {
     Param (
@@ -841,7 +871,16 @@ Write-Host "Notepad++ URL: $($allUrls.NotepadPlusPlus)"
 # =============================================================================
 # EXECUTION AREA - Download All Applications
 # =============================================================================
+if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
+    Write-Host "DeployR.Utility module found."
+    Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
+    #Set-DeployRHost "http://localhost:7282"
+    Connect-ToDeployR
+    $AllApps = Get-DeployRApplication
 
+} else {
+    Write-Host "DeployR.Utility module not found. Please Where DeployR Server is installed to and update paths."
+}
 
 $Architecture = 'x64'
 
