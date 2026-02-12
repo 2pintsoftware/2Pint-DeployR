@@ -35,7 +35,7 @@ if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.
     $AllApps = Get-DeployRApplication
 
 } else {
-    Write-Host "DeployR.Utility module not found. Please ensure DeployR Client is installed."
+    Write-Host "DeployR.Utility module not found. Please Where DeployR Server is installed to and update paths."
 }
 #region Functions
 #Function to Create Apps in DeployR
