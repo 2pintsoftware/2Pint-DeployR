@@ -28,6 +28,7 @@ VLC is saying it's a 16bit app, so check the download
 
 # Configure root download path
 $RootPath = "D:\DeployRSources\Applications"
+$ForceOverwriteDownloads = $true
 
 # Check for Administrator role
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -942,7 +943,7 @@ Foreach ($app in $apps) {
             }
         } else {
             Write-Host "  ✗ $($app.AppName) exists in DeployR but is outdated. Will proceed to upload after download." -ForegroundColor Red
-            $result = Save-AppInstaller -RootPath $RootPath -InputObject $app -Verbose
+            $result = Save-AppInstaller -RootPath $RootPath -InputObject $app -Verbose -Force:$ForceOverwriteDownloads
             $results += $result
             # Check if download succeeded OR file was already present (skipped)
             if ($result.Success -or $result.Skipped) {
