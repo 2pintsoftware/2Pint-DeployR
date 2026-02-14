@@ -104,10 +104,16 @@ Function Test-DeployRAppExists {
 
     $existingApp = $AllApps | Where-Object { $_.Name -eq $AppName } -ErrorAction SilentlyContinue
     if ($null -ne $existingApp) {
+        if ($existingApp.versions.contentSize -eq '0'){
+            Write-Host "No content uploaded for the application: $AppName"
+            return $false
+        }
+        else {
         $LatestVersion = ($existingApp.versions | Select-Object -ExpandProperty Description | Sort-Object -Descending | Select-Object -First 1)
-        return [PSCustomObject]@{
-            Name          = $existingApp.Name
-            LatestVersion = $LatestVersion
+            return [PSCustomObject]@{
+                Name          = $existingApp.Name
+                LatestVersion = $LatestVersion
+            }
         }
     } else {
         return $false
