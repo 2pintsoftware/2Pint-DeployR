@@ -3,6 +3,10 @@ Grab the DeployR information along with some general system information for trou
 Grab several logs and package them into a zip file for troubleshooting
 Ideally run the DeployR-Troubleshooting.ps1 script first to pull additional logs that will be included in the output of the zip file this script creates.
 
+
+Change Log
+ - 2026.2.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
+
 #>
 
 
@@ -148,6 +152,11 @@ $LogFiles = Get-ChildItem -Path "$ContentLocation" -Filter "*.log" -Recurse
 foreach ($LogFile in $LogFiles){
     Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
 }
+
+#Get Detailed List of all downloads in the $ContentLocation\Download Folder
+$DownloadFiles = Get-ChildItem -Path "$ContentLocation\Downloads" | Select-Object *
+#Write to Dedicated Log File with a ---------------- in between each entry:
+$DownloadFiles | ForEach-Object { $_ | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force; "----------------" | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force }    
 
 #Get DeployR (and other 2Pint Software) Configuration
 $2PintRegPath = "HKLM:\SOFTWARE\2Pint Software"
