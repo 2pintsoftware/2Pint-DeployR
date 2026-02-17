@@ -32,6 +32,7 @@ Change Log
 - 2026.02.16 - Updated MIME Type Section to remove errors on duplicates
 - 2026.02.17 - Added BackConnectionHostNames registry check
 - 2026.02.17 - Added Freespace check on the Volume the DeployR Content is located
+- 2026.02.17 - Added check for .net 4.8 on 2019 ServerOS
 
 
 To DO
@@ -885,6 +886,40 @@ $PowerShellVersionInstalled = $installedApps | Where-Object { $_.DisplayName -ma
         }
     }
 }
+#Double Check DotNET 4.8 on Server 2019
+$ServerOSVersion = (Get-CimInstance -Class Win32_OperatingSystem).Version
+if ($ServerOSVersion -like "10.0.17763*") {
+    # Check .NET Framework versions (4.5 and later) from Registry
+    Write-Host "Confirm .NET 4.8 on Server 2019"
+    $netfxKey = "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"
+    if (Test-Path $netfxKey) {
+        $release = (Get-ItemProperty -Path $netfxKey -Name Release -ErrorAction SilentlyContinue).Release
+        if ($release) {
+            switch ($release) {
+                { $_ -ge 533325 } { $version = "4.8.1"; break }
+                { $_ -ge 528040 } { $version = "4.8"; break }
+                { $_ -ge 461808 } { $version = "4.7.2"; break }
+                { $_ -ge 461308 } { $version = "4.7.1"; break }
+                { $_ -ge 460798 } { $version = "4.7"; break }
+                { $_ -ge 394802 } { $version = "4.6.2"; break }
+                { $_ -ge 394254 } { $version = "4.6.1"; break }
+                { $_ -ge 393295 } { $version = "4.6"; break }
+                { $_ -ge 379893 } { $version = "4.5.2"; break }
+                { $_ -ge 378675 } { $version = "4.5.1"; break }
+                { $_ -ge 378389 } { $version = "4.5"; break }
+                default { $version = "Unknown" }
+            }
+            Write-Host ".NET Framework Version: $version (Release: $release)"
+            if ($release -ge 528040) {
+                Write-Host ".NET Framework 4.8 or later is installed." -ForegroundColor Green
+        }   
+        } else {
+            Write-Host ".NET Framework 4.5+ not found." -ForegroundColor Red
+        }
+    } else {
+        Write-Host ".NET Framework registry key not found." -ForegroundColor Red
+    }
+}
 #Double Check ADK = $ADKVersion is installed
 $PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deployment Kit Windows Preinstallation Environment" } | ForEach-Object {
     if ($_.Installed) {
@@ -1154,7 +1189,7 @@ if ($Installed_2Pint_Software_StifleR_Server){
             }
         }
     }
-
+    
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     
     Write-Host "Testing Dashboard Registry Settings for URLs" -ForegroundColor Cyan
@@ -1267,7 +1302,7 @@ if ($Installed_2Pint_Software_DeployR){
             }
         }
     }
-
+    
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
