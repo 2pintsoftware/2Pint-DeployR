@@ -210,14 +210,14 @@ function Get-InstalledApps
     
     # Get all installed apps, filter out those without InstallDate, and keep only the latest version of each
     $allApps = Get-ItemProperty $regpath | .{process{if($_.DisplayName -and $_.UninstallString) { $_ } }} | 
-        Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString
+    Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString
     
     # Filter out apps without InstallDate and group by DisplayName to keep only the latest
     $filteredApps = $allApps | Where-Object { $_.InstallDate -and $_.InstallDate -ne '' } | 
-        Group-Object -Property DisplayName | 
-        ForEach-Object {
-            $_.Group | Sort-Object -Property InstallDate -Descending | Select-Object -First 1
-        }
+    Group-Object -Property DisplayName | 
+    ForEach-Object {
+        $_.Group | Sort-Object -Property InstallDate -Descending | Select-Object -First 1
+    }
     
     return $allApps | Sort-Object DisplayName
 }
@@ -615,6 +615,92 @@ SELECT @dbName AS ActualDbName, CASE WHEN @dbName IS NULL THEN 0 ELSE 1 END AS D
     return $result
 }
 
+function Set-IISMIMETypes {
+    # Set the MIME Types for the iPXE boot files, fonts, etc.
+    # v2.0 - accounts for duplicates (e.g. BIN, TTF, WIM)
+    
+    $mimeTypeList = @(
+    @(".",     "application/octet-stream"), # BCD file (with no extension)
+    @(".bcd",  "application/octet-stream"), # boot.bcd boot configuration files
+    @(".bin",  "application/octet-stream"), # wimboot.bin file
+    @(".com",  "application/octet-stream"), # BIOS boot loaders
+    @(".efi",  "application/octet-stream"), # EFI loader files
+    @(".kpxe", "application/octet-stream"), # For the UNDIonly version of iPXE
+    @(".n12",  "application/octet-stream"), # BIOS loaders without F12 key press
+    @(".pxe",  "application/octet-stream"), # For the iPXE BIOS loader files
+    @(".sdi",  "application/octet-stream"), # For the boot.sdi file
+    @(".ttf",  "application/octet-stream"), # For the boot fonts
+    @(".wim",  "application/octet-stream")  # For the winpe images itself
+    )
+    
+    foreach($mimeType in $mimeTypeList)
+    {
+        #$mimeType[0] - extension; $mimeType[1] - mimeType
+        if((Get-WebConfigurationProperty -Filter "system.webServer/staticContent" -Name "Collection").Where({$_.fileExtension -eq $mimeType[0]}).Count)
+        {
+            # Update the existing setting without destroying everything else :)
+            Set-WebConfigurationProperty -Filter "system.webServer/staticContent/mimeMap[@fileExtension='$($mimeType[0])']" -Name "mimeType" -Value $mimeType[1]
+        } 
+        else 
+        {
+            # Add a new setting
+            Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension=$mimeType[0];mimeType=$mimeType[1]}
+        }
+    }
+}
+
+function Get-BackConnectionHostNames {
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+    $propertyName = "BackConnectionHostNames"
+    $RegItem = Get-Item -path $regPath -ErrorAction SilentlyContinue 
+    $BackConnectionHostNamesValue = $RegItem.GetValue($propertyName, $null)
+    if ($BackConnectionHostNamesValue) {
+        return $BackConnectionHostNamesValue
+    }
+    else {
+        return @()
+    }
+}
+function Set-BackConnectionHostNames {
+    [CmdletBinding()]
+    param(
+    [string[]]$HostNames
+    )
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+    $propertyName = "BackConnectionHostNames"
+    $multiStringData = $HostNames
+    Set-ItemProperty -Path $regPath -Name $propertyName -Value $multiStringData -Type MultiString
+}
+function Get-FQDNFromDashboardConfig {
+    $regPath = 'HKLM:\SOFTWARE\2Pint Software\StifleR\Dashboard'
+    $propertyName = 'ServiceUrl'
+    $RegItem = Get-Item -path $regPath -ErrorAction SilentlyContinue
+    if ($RegItem) {
+        $serviceUrl = $RegItem.GetValue($propertyName, $null)
+        if ($serviceUrl) {
+            try {
+                $uri = [Uri]$serviceUrl
+                return $uri.Host
+            }
+            catch {
+                Write-Warning "ServiceUrl value is not a valid URI: $serviceUrl"
+                return $null
+            }
+        }
+        else {
+            Write-Warning "ServiceUrl property not found in registry at $regPath"
+            return $null
+        }
+    }
+    else {
+        Write-Warning "Registry key not found: $regPath"
+        return $null
+    }
+}
+
+
+
+
 
 #endregion
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
@@ -719,16 +805,16 @@ foreach ($app in $PreReqApps) {
 
 # Deduplicate by title, prefer entries with InstallDate and the latest date
 $PreReqAppsStatus = $PreReqAppsStatus |
-    Group-Object -Property Title |
-    ForEach-Object {
-        $withDate = $_.Group | Where-Object { $_.InstallDate }
-        if ($withDate) {
-            $withDate | Sort-Object {[int]$_.InstallDate} -Descending | Select-Object -First 1
-        }
-        else {
-            $_.Group | Select-Object -First 1
-        }
+Group-Object -Property Title |
+ForEach-Object {
+    $withDate = $_.Group | Where-Object { $_.InstallDate }
+    if ($withDate) {
+        $withDate | Sort-Object {[int]$_.InstallDate} -Descending | Select-Object -First 1
     }
+    else {
+        $_.Group | Select-Object -First 1
+    }
+}
 
 foreach ($app in $PreReqAppsStatus) {
     
@@ -753,7 +839,7 @@ foreach ($app in $PreReqAppsStatus) {
     else {
         Write-Host " ✗  $($app.Title)" -ForegroundColor Red
         if ($app.Notes) {
-                Write-Host " $($app.Notes)" -ForegroundColor Red
+            Write-Host " $($app.Notes)" -ForegroundColor Red
         }
     }
 }
@@ -1018,6 +1104,37 @@ if ($Installed_2Pint_Software_StifleR_Server){
     } catch {
         Write-Host "Error checking for StifleRDashboard Web Virtual Directory: $_" -ForegroundColor Red
     }
+    Write-Host ""
+    Write-Host "Confirm BackConnectionHostNames for Dashboard access... (prevent authentication loop)" -ForegroundColor Cyan
+    $BackConnectionHostNames = Get-BackConnectionHostNames
+    if ($BackConnectionHostNames.Count -gt 0) {
+        Write-Host "Current BackConnectionHostNames:" -ForegroundColor Green
+        foreach ($item in $BackConnectionHostNames) {
+            Write-Host " - $item" -ForegroundColor DarkGray
+        }
+    }
+    else {
+        Write-Host "No BackConnectionHostNames configured." -ForegroundColor Red
+        Write-Host "Remediation: Add the Dashboard URL hostname to the BackConnectionHostNames registry value." -ForegroundColor Yellow
+        Write-Host "Example: If Dashboard URL is https://dashboard.contoso.com, add 'dashboard.contoso.com' to BackConnectionHostNames." -ForegroundColor DarkGray
+        
+        #Offer to do it for them:
+        $FQDN = Get-FQDNFromDashboardConfig
+        if ($FQDN) {
+            write-host "I detected the Dashboard Service URL is configured with hostname: '$FQDN'." -ForegroundColor Green
+            Write-Host "I can add '$FQDN' to the BackConnectionHostNames for you." -ForegroundColor Yellow
+            $response = Read-Host "Do you want me to add '$FQDN' to BackConnectionHostNames? (Y/N)"
+            if ($response -match '^[Yy]') {
+                $UpdatedHostNames = $BackConnectionHostNames + $FQDN
+                Set-BackConnectionHostNames -HostNames $UpdatedHostNames
+                Write-Host "Added '$FQDN' to BackConnectionHostNames." -ForegroundColor Green
+            }
+            else {
+                Write-Host "Please remember to add '$FQDN' to BackConnectionHostNames to prevent authentication issues." -ForegroundColor Yellow
+            }
+        }
+    }
+
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     
     Write-Host "Testing Dashboard Registry Settings for URLs" -ForegroundColor Cyan
@@ -1429,34 +1546,12 @@ if ($IISMimeTypeUpdateRequired) {
     Write-Host "Would you like to add the missing IIS MIME types now? (Y/N): " -ForegroundColor Yellow -NoNewline
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
-        Write-Host "Adding missing IIS MIME types..." -ForegroundColor Yellow
-        #Set the MIME types for the iPXE boot files, etc. 
-        Import-Module WebAdministration
-        #EFI loader files  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.efi';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #BIOS boot loaders  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.com';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #BIOS loaders without F12 key press  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.n12';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the boot.sdi file  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.sdi';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the boot.bcd boot configuration files  & BCD file (with no extension)
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.bcd';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the winpe images itself (already added on newer/patched versions of Windows Server
-        #Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.wim';mimeType='application/octet-stream'}  
-        #for the iPXE BIOS loader files  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.pxe';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the UNDIonly version of iPXE  
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.kpxe';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the .iso file type
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.iso';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the .img file type
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.img';mimeType='application/octet-stream'} -ErrorAction SilentlyContinue
-        #For the .ipxe file 
-        Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension='.ipxe';mimeType='text/plain'}
+        Set-IISMIMETypes
         Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
     }
 }
 
 Stop-Transcript
+Write-Host ""
+Write-Host "Transcript Recorded to $TranscriptFile" -ForegroundColor Green
+Write-Host "=========================================================================" -ForegroundColor DarkGray
