@@ -1592,5 +1592,5 @@ if ($IISMimeTypeUpdateRequired) {
 
 Stop-Transcript
 Write-Host ""
-Write-Host "Transcript Recorded to $TranscriptFile" -ForegroundColor Green
+Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
 Write-Host "=========================================================================" -ForegroundColor DarkGray
