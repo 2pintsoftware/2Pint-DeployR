@@ -154,9 +154,13 @@ $2PintRegPath = "HKLM:\SOFTWARE\2Pint Software"
 Get-ChildItem -Path $2PintRegPath -Recurse | Out-File -FilePath "$TempFolder\2Pint_Software_Registry_Settings.txt" -Force
 
 #Get Hardware Information
-systeminfo | Out-File -FilePath "$TempFolder\System_Hardware_Information.txt" -Force
+#systeminfo | Out-File -FilePath "$TempFolder\System_Hardware_Information.txt" -Force
 #Get CPU & Number of Cores
-Get-CimInstance -ClassName Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors | Out-File -FilePath "$TempFolder\CPU_Information.txt" -Force
+#Get-CimInstance -ClassName Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors | Out-File -FilePath "$TempFolder\CPU_Information.txt" -Force
+
+#Get Computer Info (Replaces the 2 above)
+$ComputerInfo = Get-ComputerInfo
+$ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 
 #Get DeployR Event Logs
 Find-EventLogs -Export -OutputDirectory $TempFolder -LogNameFilter "*DeployR*"
