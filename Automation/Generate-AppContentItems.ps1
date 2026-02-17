@@ -1,5 +1,5 @@
 <#
-DON't RUN IN ISE!  USE a REAL PowerShell Terminal or VSCode & PS7
+DON't RUN IN ISE or PS 5!  USE a REAL PowerShell7 Terminal or VSCode & PS7
 
 CURRENT ISSUES:
 GreenShot hangs and waits for user input
@@ -24,11 +24,15 @@ VLC is saying it's a 16bit app, so check the download
 
     Updates
     26.2.12 - Added Admin Check
+    26.2.17 - Added Tags for Apps (to easier pair with another thing I'm working on)
+    26.2.17 - Added Ability to set App Description seperate from Version Description (Version description is automatically set to the applcation version number)
 #>
 
 # Configure root download path
 $RootPath = "D:\DeployRSources\Applications"
 $ForceOverwriteDownloads = $true
+$Tags = @('FrontEnd','2PintLabs')
+$AppDescription = '2PintLabs Script Generated Application'
 
 # Check for Administrator role
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -83,11 +87,12 @@ Function New-DeployRApp {
         [string]$AppName,
         [string]$AppSourceFolder,
         [string]$AppDescription = "No Description Provided",
+        [string]$AppVersionDescription = "No Description Provided",
         [string]$InstallationCommandLine = ""
     )
 
-    $NewDRCI = New-DeployRContentItem -Type Folder -Name $AppName -Description "Script Generated" -Purpose Application
-    New-DeployRContentItemVersion -ContentItemId $NewDRCI.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppDescription
+    $NewDRCI = New-DeployRContentItem -Type Folder -Name $AppName -Description $AppDescription -Purpose Application
+    New-DeployRContentItemVersion -ContentItemId $NewDRCI.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersionDescription
 }
 Function Test-DeployRAppExists {
     Param (
@@ -143,6 +148,27 @@ Function Update-DeployRApp {
         $NewDRCIV = New-DeployRContentItemVersion -ContentItemId $existingApp.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersion
     } else {
         Write-Host "DeployR Application not found: $AppName"
+    }
+}
+
+Function Confirm-DeployRAppTags {
+    [CmdletBinding()]
+    Param (
+    [string]$AppName,
+    [string[]]$Tags
+    )
+    $WorkingApps = Get-DeployRMetaData -Type ContentItem | where-object {$_.name -eq $AppName} 
+    foreach ($WorkingApp in $WorkingApps){
+        $currentTags = $WorkingApp.tags
+        $missingTags = $Tags | Where-Object { $_ -notin $currentTags }
+        if ($missingTags.Count -gt 0) {
+            $WorkingApp.tags += $missingTags
+            $SetTags = Set-DeployRMetadata -Type ContentItem -Object $WorkingApp
+            $SetTags = $null
+            Write-Host "Added missing tags to $AppName $($missingTags -join ', ')" -ForegroundColor Green
+        } else {
+            #Write-Host "All tags already present for $AppName" -ForegroundColor Cyan
+        }
     }
 }
 
@@ -959,6 +985,9 @@ Foreach ($app in $apps) {
                     $installCommand = if ($result.ActualInstallCommand) { $result.ActualInstallCommand } else { $app.SilentInstallCommand }
                     Write-Host "    Install Command: $installCommand" -ForegroundColor Gray
                     Update-DeployRApp -AppName $app.AppName -AppVersion $app.Version -AppSourceFolder ($result.Destination | Split-Path) -InstallationCommandLine "$installCommand" -AllApps $AllApps
+                    $AppMetaData = Get-DeployRMetaData -Type ContentItem | where-object {$_.name -eq $app.AppName}
+                    $AppMetaData.tags = $Tags
+                    $AppMetaData | Set-DeployRMetadata -Type ContentItem
                     $deployRStats.Updated += [PSCustomObject]@{
                         AppName = $app.AppName
                         Version = $app.Version
@@ -996,7 +1025,10 @@ Foreach ($app in $apps) {
                 # Use the actual install command from the download result if available
                 $installCommand = if ($result.ActualInstallCommand) { $result.ActualInstallCommand } else { $app.SilentInstallCommand }
                 Write-Host "    Install Command: $installCommand" -ForegroundColor Gray
-                $NewApp = New-DeployRApp -AppName $app.AppName -AppSourceFolder ($result.Destination | Split-Path) -AppDescription "$($app.Version)" -InstallationCommandLine "$installCommand"
+                $NewApp = New-DeployRApp -AppName $app.AppName -AppSourceFolder ($result.Destination | Split-Path) -AppVersionDescription "$($app.Version)" -AppDescription "$AppDescription" -InstallationCommandLine "$installCommand"
+                $AppMetaData = Get-DeployRMetaData -Type ContentItem | where-object {$_.name -eq $app.AppName}
+                $AppMetaData.tags = $Tags
+                $AppMetaData | Set-DeployRMetadata -Type ContentItem
                 $deployRStats.Created += [PSCustomObject]@{
                     AppName = $app.AppName
                     Version = $app.Version
@@ -1022,6 +1054,8 @@ Foreach ($app in $apps) {
             }
         }
     }
+    #Confirm Tags are present from initial Variable
+    Confirm-DeployRAppTags -AppName $app.AppName -Tags $Tags
 }
 
 <#
