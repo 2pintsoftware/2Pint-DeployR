@@ -28,7 +28,10 @@ Change Log
 - 2026.01.26 - Updated script to handle when it finds multiple installed versions of .net Software in registry
 - 2026.01.27 - Updated C++ Name to Microsoft Visual C++ v14 Redistributable (x64) to match MS new naming
 - 2026.01.27 - Add DeployR Registry Log File
-- 2026.02.02 - Added ADK Version Check.  I've ad
+- 2026.02.02 - Added ADK Version Check.
+- 2026.02.16 - Updated MIME Type Section to remove errors on duplicates
+- 2026.02.17 - Added BackConnectionHostNames registry check
+- 2026.02.17 - Added Freespace check on the Volume the DeployR Content is located
 
 
 To DO
@@ -697,7 +700,24 @@ function Get-FQDNFromDashboardConfig {
         return $null
     }
 }
-
+#Function to get freespace in GB of Drive the path is pointing to..
+#AKA Get-FreeSpaceAvailable -Path d:\DeployR would get the free space for the D volume
+function Get-FreeSpaceAvailable {
+    param(
+    [Parameter(Mandatory=$true)]
+    [string]$Path
+    )
+    
+    try {
+        $drive = Get-PSDrive -Name (Split-Path -Qualifier $Path).TrimEnd(':') -ErrorAction Stop
+        $freeSpaceGB = [math]::Round($drive.Free / 1GB, 2)
+        return $freeSpaceGB
+    }
+    catch {
+        Write-Error "Failed to get free space for path '$Path'. Error: $_"
+        return $null
+    }
+}
 
 
 
@@ -1217,18 +1237,37 @@ if ($Installed_2Pint_Software_DeployR){
     if ($DeployRRegData){
         #Export to file for logging
         $DeployRRegData | Out-File -FilePath "$TempFolder\DeployR_Registry_Info.log" -Force -Encoding UTF8
+        $DeployRCon
     }
     if ($DeployRRegData -and $DeployRRegData.ContentLocation) {
         Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
+        $DeployRContentPath = $DeployRRegData.ContentLocation
     }
     else {
         if (Test-Path "$env:ProgramData\2Pint Software\DeployR\Content") {
             Write-Host " DeployR ContentLocation (Default): $env:ProgramData\2Pint Software\DeployR" -ForegroundColor Yellow
+            $DeployRContentPath = "$env:ProgramData\2Pint Software\DeployR\Content"
         }
         else {
             Write-Host " DeployR ContentLocation is NOT found in Registry and not in Default Location." -ForegroundColor Red
         }
     }
+    #Get Free Space for where the DeployR Content is then return free space in GB (REg if 100GB or larger, Yellow if 50-100GB, Red if under 50GB)
+    if ($DeployRContentPath) {
+        $FreeSpaceGB = Get-FreeSpaceAvailable -Path $DeployRContentPath
+        if ($FreeSpaceGB -ne $null) {
+            if ($FreeSpaceGB -ge 100) {
+                Write-Host " Free space available at DeployR Content Location: $FreeSpaceGB GB" -ForegroundColor Green
+            }
+            elseif ($FreeSpaceGB -ge 50 -and $FreeSpaceGB -lt 100) {
+                Write-Host " Free space available at DeployR Content Location: $FreeSpaceGB GB" -ForegroundColor Yellow
+            }
+            else {
+                Write-Host " Free space available at DeployR Content Location: $FreeSpaceGB GB" -ForegroundColor Red
+            }
+        }
+    }
+
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
