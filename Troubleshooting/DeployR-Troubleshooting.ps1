@@ -726,7 +726,7 @@ function Get-FreeSpaceAvailable {
 #endregion
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
-$TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting_PreReqs.log"
+$TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting_TroubleShooting.log"
 $InstalledAppsFilePath = "$TempFolder\InstalledApps.log"
 if (Test-Path -Path $TranscriptFilePath) {
     Remove-Item -Path $TranscriptFilePath -Force
