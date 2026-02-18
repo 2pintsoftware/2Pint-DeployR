@@ -1,6 +1,10 @@
 #Goal here is to connect to the DeployR Server API and do some checks on content items.
 
-
+# Check for Administrator role
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script must be run as Administrator."
+    exit 1
+}
 #region Function
 function Connect-ToDeployR {
     try {
@@ -59,6 +63,13 @@ function Get-DeployRContentPath {
 }
 
 #endregion
+$TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
+if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
+$TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting_ContentItems.log"
+if (Test-Path -Path $TranscriptFilePath) {
+    Remove-Item -Path $TranscriptFilePath -Force
+} 
+Start-Transcript -Path $TranscriptFilePath -Force
 
 #Execution Area - Running Tests
 Connect-ToDeployR
@@ -164,3 +175,8 @@ if ($Winx64Bootimage.Count -gt 0) {
 else {
     Write-Warning "No Windows x64 BootImages found."
 }
+
+Stop-Transcript
+Write-Host ""
+Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
+Write-Host "=========================================================================" -ForegroundColor DarkGray
