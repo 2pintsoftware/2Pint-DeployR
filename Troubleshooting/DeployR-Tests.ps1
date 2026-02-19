@@ -180,3 +180,38 @@ Stop-Transcript
 Write-Host ""
 Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
 Write-Host "=========================================================================" -ForegroundColor DarkGray
+
+#iPXE WS & 2PXE Checks
+$2PintService2PXE = Get-Service -Name '2PXE' -ErrorAction SilentlyContinue
+$2PintServiceiPXEWS = Get-Service -Name 'iPXEWS' -ErrorAction SilentlyContinue
+if ($2PintService2PXE){
+    if ($2PintService2PXE.Status -eq 'Running') {
+        Write-Host "2PXE Service is running." -ForegroundColor Green
+    }
+    else {
+        Write-Warning "2PXE Service is not running. Current status: $($2PintService2PXE.Status)"
+    }
+}
+else {
+    Write-Warning "2PXE Service not found. Please ensure 2PXE is installed."
+}
+if ($2PintServiceiPXEWS){
+    if ($2PintServiceiPXEWS.Status -eq 'Running') {
+        Write-Host "iPXE WS Service is running." -ForegroundColor Green
+    }
+    else {
+        Write-Warning "iPXE WS Service is not running. Current status: $($2PintServiceiPXEWS.Status)"
+    }
+    #Check for DeployR Script for iPXE WS
+    $DeployRiPXEWSPath = "C:\Program Files\2Pint Software\iPXE AnywhereWS\Scripts\Custom\deployr.ps1"
+    if (Test-Path $DeployRiPXEWSPath) {
+        Write-Host "Found DeployR iPXE WS script at expected path: $DeployRiPXEWSPath" -ForegroundColor Green
+    }
+    else {
+        Write-Host "DeployR iPXE WS script not found at expected path: $DeployRiPXEWSPath. Please ensure it is present for proper iPXE WS functionality with DeployR." -ForegroundColor Yellow
+        Write-Host "Get the latest copy here: https://github.com/2pintsoftware/2Pint-iPXEAnywhere/blob/main/Scripts/Custom/DeployR.ps1" -ForegroundColor Cyan
+    }
+}
+else {
+    Write-Warning "iPXE WS Service not found. Please ensure iPXE WS is installed."
+}

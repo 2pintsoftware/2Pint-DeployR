@@ -26,6 +26,7 @@ VLC is saying it's a 16bit app, so check the download
     26.2.12 - Added Admin Check
     26.2.17 - Added Tags for Apps (to easier pair with another thing I'm working on)
     26.2.17 - Added Ability to set App Description seperate from Version Description (Version description is automatically set to the applcation version number)
+    26.2.19 - Removed Greenshot from the list (most of the code is still her, just preventing it from making an app), as it wasn't 100% silent install, causes issues in a TS
 #>
 
 # Configure root download path
@@ -937,13 +938,13 @@ $Thunderbird = Get-ThunderbirdLatestUrl -Architecture $Architecture
 $NotepadPlusPlus = Get-NotepadPlusPlusLatestUrl -Architecture $Architecture
 $VLC = Get-VLCLatestUrl -Architecture $Architecture
 $SevenZip = Get-7ZipLatestUrl -Architecture $Architecture
-$Greenshot = Get-GreenshotLatestUrl
+#$Greenshot = Get-GreenshotLatestUrl
 $PaintDotNet = Get-PaintDotNetLatestUrl
 $OBSStudio = Get-OBSStudioLatestUrl -Architecture $Architecture
 $VSCode = Get-VSCodeLatestUrl -Architecture $Architecture
 
 # Display retrieved application info
-$apps = @($Firefox, $Thunderbird, $NotepadPlusPlus, $VLC, $SevenZip, $Greenshot, $PaintDotNet, $OBSStudio, $VSCode)
+$apps = @($Firefox, $Thunderbird, $NotepadPlusPlus, $VLC, $SevenZip, $PaintDotNet, $OBSStudio, $VSCode)
 #$apps = @($SevenZip)
 foreach ($app in $apps) {
     if ($app) {
