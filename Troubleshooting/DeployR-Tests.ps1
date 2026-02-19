@@ -176,10 +176,6 @@ else {
     Write-Warning "No Windows x64 BootImages found."
 }
 
-Stop-Transcript
-Write-Host ""
-Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
-Write-Host "=========================================================================" -ForegroundColor DarkGray
 
 #iPXE WS & 2PXE Checks
 $2PintService2PXE = Get-Service -Name '2PXE' -ErrorAction SilentlyContinue
@@ -215,3 +211,8 @@ if ($2PintServiceiPXEWS){
 else {
     Write-Warning "iPXE WS Service not found. Please ensure iPXE WS is installed."
 }
+
+Stop-Transcript
+Write-Host ""
+Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
+Write-Host "=========================================================================" -ForegroundColor DarkGray
