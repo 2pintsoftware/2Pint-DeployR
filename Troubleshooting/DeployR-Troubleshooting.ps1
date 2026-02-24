@@ -36,6 +36,7 @@ Change Log
 - 2026.02.17 - Added BackConnectionHostNames registry check
 - 2026.02.17 - Added Freespace check on the Volume the DeployR Content is located
 - 2026.02.17 - Added check for .net 4.8 on 2019 ServerOS
+- 2026.02.24 - Added iPXE & 2PXE Apps to list, noted as OPTIONAL
 
 
 To DO
@@ -70,6 +71,9 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR WmiAgent'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR ActionHub'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
+[PSCustomObject]@{Title = '2Pint Software iPXE Anywhere WebService'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/ipxe-ws'}
+[PSCustomObject]@{Title = '2Pint Software PXE Server'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/2pxe-server'}
+
 )
 $FirewallRules = @(
 [PSCustomObject]@{DisplayName = '2Pint DeployR HTTPS 7281'; Port = 7281; Protocol = 'TCP'}
