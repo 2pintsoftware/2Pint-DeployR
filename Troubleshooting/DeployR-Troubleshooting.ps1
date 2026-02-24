@@ -1443,6 +1443,7 @@ if ($Installed_2Pint_Software_DeployR){
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 write-host "Checking Certificate... on Ports 443 & 9000" -ForegroundColor Cyan
 # Get the certificate hash from the HTTP.SYS binding for port 443
+$certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:443 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
@@ -1468,6 +1469,7 @@ if ($certHash) {
     }
     if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
 }
+$certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
@@ -1487,6 +1489,57 @@ if ($certHash) {
         $hash = netsh http show sslcert ipport="$ip`:443" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
         if ($hash) {
             Write-Host "Certificate Thumbprint for HTTPS (port 443) on $ip`: $hash" -ForegroundColor Yellow
+            $found = $true
+            break
+        }
+    }
+    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+}
+$certHash = $Null
+$certHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+if ($certHash) {
+    Write-Host  "Certificate Thumbprint for HTTPS (port 8051): $certHash" -ForegroundColor Green
+    if ($certHash -eq $CertThumbprintRegValue) {
+        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+    }
+    else {
+        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
+    }
+} else {
+    Write-Host  "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
+    # Fallback: Scan common IPs (adjust as needed)
+    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
+    $found = $false
+    foreach ($ip in $ips) {
+        $hash = netsh http show sslcert ipport="$ip`:8051" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+        if ($hash) {
+            Write-Host "Certificate Thumbprint for HTTPS (port 8051) on $ip`: $hash" -ForegroundColor Yellow
+            $found = $true
+            break
+        }
+    }
+    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+}
+$certHash = $Null
+$certHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+
+if ($certHash) {
+    Write-Host  "Certificate Thumbprint for HTTPS (port 8050): $certHash" -ForegroundColor Green
+    if ($certHash -eq $CertThumbprintRegValue) {
+        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+    }
+    else {
+        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
+    }
+} else {
+    Write-Host  "No SSL binding found for port 8050. Trying all IPs..." -ForegroundColor Yellow
+    # Fallback: Scan common IPs (adjust as needed)
+    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
+    $found = $false
+    foreach ($ip in $ips) {
+        $hash = netsh http show sslcert ipport="$ip`:8050" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+        if ($hash) {
+            Write-Host "Certificate Thumbprint for HTTPS (port 8050) on $ip`: $hash" -ForegroundColor Yellow
             $found = $true
             break
         }
