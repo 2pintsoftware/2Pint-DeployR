@@ -24,28 +24,44 @@ function Import-DriverPack {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Host "[$timestamp] Starting Driver Pack Import for $MakeAlias - $ModelAlias" -ForegroundColor Cyan
-    Write-Host "  Source Path: $InputSourceFolder"
+    Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+    Write-Host "Source Path: $InputSourceFolder" -ForegroundColor DarkGray
     if (Get-DeployRContentItem | Where-Object {$_.Name -eq "Driver Pack - $MakeAlias - $ModelAlias"}){
-        Write-Host "  Driver Pack Content Item already exists for $MakeAlias - $ModelAlias" -ForegroundColor Yellow
+        Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "Driver Pack Content Item already exists for $MakeAlias - $ModelAlias" -ForegroundColor Yellow
     }
     else {
-        Write-Host "  Driver Pack Content Item does not exist for $MakeAlias - $ModelAlias. Creating new one."
+        Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "Driver Pack Content Item does not exist for $MakeAlias - $ModelAlias. Creating new one..." -ForegroundColor Cyan
         #Download the Driver Pack
         if ($InputSourceFolder -and (Test-Path $InputSourceFolder)) {
-            Write-Host "  $(Get-Date -Format "HH:mm:ss") - Using provided Input Source Folder: $InputSourceFolder"
+            Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+            Write-Host "Using provided Input Source Folder: $InputSourceFolder" -ForegroundColor DarkGray
         }
         
         #Create DeployR Content Item for the Driver Pack
-        
+        $StartDPCreationTime = Get-Date
         $NewCI = New-DeployRContentItem -Name "Driver Pack - $MakeAlias - $ModelAlias" -Type Folder -Purpose DriverPack -Description "Generated for $MakeAlias - $ModelAlias"
         $ContentId = $NewCI.id
         $NewVersion = New-DeployRContentItemVersion -ContentItemId $ContentId -Description "Source: $InputSourceFolder" -DriverManufacturer $MakeAlias -DriverModel $ModelAlias # -SourceFolder "$InputSourceFolder"
         $ContentVersion = $NewVersion.versionNo
+        Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "Created DeployR Content Item for Driver Pack: $($NewCI.name), ID $ContentId, Version $ContentVersion" -ForegroundColor Green
         #Upload the extracted driver pack to the DeployR Content Item
-        write-Output "  $(Get-Date -Format "HH:mm:ss") - Uploading extracted Driver Pack to DeployR Content Item"
+
+        Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+        Write-Host "Uploading extracted Driver Pack to newly created DeployR Content Item..." -ForegroundColor Cyan
+        write-Output "This can take a little while or long while, depending on the size of the driver pack and your network speed to DeployR. Please be patient..."
+
         try {
             $ciVersion = update-DeployRContentItemContent -ContentId $ContentId -ContentVersion $ContentVersion -SourceFolder "$InputSourceFolder"
-            write-Host "  $(Get-Date -Format "HH:mm:ss") - Successfully uploaded Driver Pack content to DeployR!  Content Item Info:" -ForegroundColor Green
+            $StopDPCreationTime = Get-Date
+            #Time the creation of the DeployR Content Item and upload of the driver pack content in Minutes and Seconds format MM:SS
+            $DPCreationDuration = $StopDPCreationTime - $StartDPCreationTime
+            $DPCreationDurationFormatted = "{0:D2}:{1:D2}" -f $DPCreationDuration.Minutes, $DPCreationDuration.Seconds
+            Write-Host "  $(Get-Date -Format "HH:mm:ss") | " -NoNewline -ForegroundColor DarkGray
+            Write-Host "Time taken to create DeployR Content Item and Version: $DPCreationDurationFormatted" -foregroundColor Green
+            write-Host "  Successfully uploaded Driver Pack content to DeployR!  Content Item Info:" -ForegroundColor Green
             write-Host "    CI driverManufacturer:   $($ciVersion.driverManufacturer)" -ForegroundColor DarkGray
             write-Host "    CI driverModel:          $($ciVersion.driverModel)" -ForegroundColor DarkGray
             write-Host "    CI ID:                   $($ciVersion.contentItemId), Version: $($ciVersion.versionNo)" -ForegroundColor DarkGray
