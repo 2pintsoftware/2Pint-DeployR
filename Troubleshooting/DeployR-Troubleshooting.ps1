@@ -822,6 +822,7 @@ foreach ($app in $PreReqApps) {
             Title    = $app.Title
             Installed = $false
             URL      = $app.URL
+            Notes    = $app.Notes
         }
     }
 }
@@ -931,6 +932,7 @@ $PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deplo
             Write-Host "✗ Windows ADK version is different than the required version." -ForegroundColor Red
             Write-Host "   Installed Version: $($_.Version)" -ForegroundColor DarkGray
             Write-Host "   Required  Version: $ADKVersion" -ForegroundColor DarkGray
+            Write-Host "   NOTE: $($_.Notes)" -ForegroundColor Yellow
             Write-Host "=========================================================================" -ForegroundColor Red
         }
     }
@@ -1115,6 +1117,7 @@ if ($Installed_2Pint_Software_DeployR){
         $Global:DeployRServiceRunning = $false
     }
 }
+
 #endRegion Services
 
 #Confirm StifleR Registry Settings
@@ -1441,7 +1444,7 @@ if ($Installed_2Pint_Software_DeployR){
     
 }
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Certificate... on Ports 443 & 9000" -ForegroundColor Cyan
+write-host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Cyan
 # Get the certificate hash from the HTTP.SYS binding for port 443
 $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:443 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
