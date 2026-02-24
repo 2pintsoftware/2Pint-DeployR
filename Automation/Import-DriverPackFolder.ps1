@@ -22,7 +22,8 @@ function Import-DriverPack {
     }
     Import-Module $DeployRModulePath
 
-
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "[$timestamp] Starting Driver Pack Import for $MakeAlias - $ModelAlias" -ForegroundColor Cyan
     Write-Host "  Source Path: $InputSourceFolder"
     if (Get-DeployRContentItem | Where-Object {$_.Name -eq "Driver Pack - $MakeAlias - $ModelAlias"}){
         Write-Host "  Driver Pack Content Item already exists for $MakeAlias - $ModelAlias" -ForegroundColor Yellow
@@ -31,20 +32,20 @@ function Import-DriverPack {
         Write-Host "  Driver Pack Content Item does not exist for $MakeAlias - $ModelAlias. Creating new one."
         #Download the Driver Pack
         if ($InputSourceFolder -and (Test-Path $InputSourceFolder)) {
-            Write-Host "  Using provided Input Source Folder: $InputSourceFolder"
+            Write-Host "  $(Get-Date -Format "HH:mm:ss") - Using provided Input Source Folder: $InputSourceFolder"
         }
         
         #Create DeployR Content Item for the Driver Pack
         
         $NewCI = New-DeployRContentItem -Name "Driver Pack - $MakeAlias - $ModelAlias" -Type Folder -Purpose DriverPack -Description "Generated for $MakeAlias - $ModelAlias"
         $ContentId = $NewCI.id
-        $NewVersion = New-DeployRContentItemVersion -ContentItemId $ContentId -Description "Source: $InputSourceFolder" -DriverManufacturer $MakeAlias -DriverModel $ModelAlias -SourceFolder "$InputSourceFolder"
+        $NewVersion = New-DeployRContentItemVersion -ContentItemId $ContentId -Description "Source: $InputSourceFolder" -DriverManufacturer $MakeAlias -DriverModel $ModelAlias # -SourceFolder "$InputSourceFolder"
         $ContentVersion = $NewVersion.versionNo
         #Upload the extracted driver pack to the DeployR Content Item
-        write-Host "  Uploading extracted Driver Pack to DeployR Content Item"
+        write-Output "  $(Get-Date -Format "HH:mm:ss") - Uploading extracted Driver Pack to DeployR Content Item"
         try {
             $ciVersion = update-DeployRContentItemContent -ContentId $ContentId -ContentVersion $ContentVersion -SourceFolder "$InputSourceFolder"
-            write-Host "  Successfully uploaded Driver Pack content to DeployR!  Content Item Info:" -ForegroundColor Green
+            write-Host "  $(Get-Date -Format "HH:mm:ss") - Successfully uploaded Driver Pack content to DeployR!  Content Item Info:" -ForegroundColor Green
             write-Host "    CI driverManufacturer:   $($ciVersion.driverManufacturer)" -ForegroundColor DarkGray
             write-Host "    CI driverModel:          $($ciVersion.driverModel)" -ForegroundColor DarkGray
             write-Host "    CI ID:                   $($ciVersion.contentItemId), Version: $($ciVersion.versionNo)" -ForegroundColor DarkGray

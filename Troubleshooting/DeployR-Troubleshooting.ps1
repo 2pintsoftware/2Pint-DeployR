@@ -1,4 +1,7 @@
 <#Tests
+
+USE POWERSHELL 7 or PowerShell ISE.  This doesn't work properly from PowerShell 5 Terminal.
+
 - Check if all required applications are installed
 - Validate server configuration settings
 - Ensure firewall rules are correctly set

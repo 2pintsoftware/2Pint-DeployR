@@ -176,7 +176,11 @@ else {
     Write-Warning "No Windows x64 BootImages found."
 }
 
-
+write-host ""
+write-host "==========================================================================" -ForegroundColor DarkGray
+write-Host " Now checking iPXE WS and 2PXE services and related DeployR content items..." -ForegroundColor Cyan
+write-host "==========================================================================" -ForegroundColor DarkGray
+write-host ""
 #iPXE WS & 2PXE Checks
 $2PintService2PXE = Get-Service -Name '2PXE' -ErrorAction SilentlyContinue
 $2PintServiceiPXEWS = Get-Service -Name 'iPXEWS' -ErrorAction SilentlyContinue
@@ -194,18 +198,62 @@ else {
 if ($2PintServiceiPXEWS){
     if ($2PintServiceiPXEWS.Status -eq 'Running') {
         Write-Host "iPXE WS Service is running." -ForegroundColor Green
+        $UsingDefaultPath = $true
+        if (-not (Test-Path -Path "C:\Program Files\2Pint Software\iPXE AnywhereWS")) {
+            Write-Host " NOTE, THIS SCRIPT ASSUMES YOU HAVE INSTALLED iPXE TO THE DEFAULT PATHS" -ForegroundColor Yellow
+            Write-Host " Default Path: C:\Program Files\2Pint Software\iPXE AnywhereWS" -ForegroundColor Yellow
+            write-host " if you didn't, please update the 3 variable paths below" -ForegroundColor Yellow
+            $UsingDefaultPath = $false
+        }
+
     }
     else {
         Write-Warning "iPXE WS Service is not running. Current status: $($2PintServiceiPXEWS.Status)"
     }
     #Check for DeployR Script for iPXE WS
-    $DeployRiPXEWSPath = "C:\Program Files\2Pint Software\iPXE AnywhereWS\Scripts\Custom\deployr.ps1"
-    if (Test-Path $DeployRiPXEWSPath) {
-        Write-Host "Found DeployR iPXE WS script at expected path: $DeployRiPXEWSPath" -ForegroundColor Green
-    }
-    else {
-        Write-Host "DeployR iPXE WS script not found at expected path: $DeployRiPXEWSPath. Please ensure it is present for proper iPXE WS functionality with DeployR." -ForegroundColor Yellow
-        Write-Host "Get the latest copy here: https://github.com/2pintsoftware/2Pint-iPXEAnywhere/blob/main/Scripts/Custom/DeployR.ps1" -ForegroundColor Cyan
+    if ($UsingDefaultPath) {
+        $iPXEBootPath = "C:\Program Files\2Pint Software\iPXE AnywhereWS\Scripts\Boot\iPXEboot.ps1"
+        $iPXEBoot_DeployRPath = "C:\Program Files\2Pint Software\iPXE AnywhereWS\Scripts\Boot\iPXEboot_DeployR.ps1"
+        $DeployRiPXEWSPath = "C:\Program Files\2Pint Software\iPXE AnywhereWS\Scripts\Custom\deployr.ps1"
+        if (Test-Path $iPXEBootPath) {
+            Write-Host "Found iPXE Boot script at expected path: $iPXEBootPath" -ForegroundColor Green
+            $iPXEBootContent = get-content $iPXEBootPath -Raw
+            #Confirm the line 'item --key n deployr Boot to DeployR' is inside the script
+            if ($iPXEBootContent -match 'item\s+--key\s+n\s+deployr\s+Boot\s+to\s+DeployR') {
+                Write-Host "iPXE Boot script contains DeployR menu item." -ForegroundColor Green
+            }
+            else {
+                if (Test-Path $iPXEBoot_DeployRPath) {
+                    Write-Host "Looks like you still have the DeployR-specific iPXE Boot script at: $iPXEBoot_DeployRPath" -ForegroundColor Yellow
+                    Write-Host "For DeployR, you will need to rename this script to just iPXEboot.ps1." -ForegroundColor Yellow
+                }
+            }
+        }
+        else {
+            Write-Host "iPXE Boot script not found at expected path: $iPXEBootPath. Please ensure it is present for proper iPXE WS functionality." -ForegroundColor Yellow
+            Write-Host "Get the latest copy here: https://github.com/2pintsoftware/2Pint-iPXEAnywhere/blob/main/Scripts/Boot/iPXEboot.ps1" -ForegroundColor Cyan
+        }
+            
+        if (Test-Path $DeployRiPXEWSPath) {
+            Write-Host "Found DeployR iPXE WS script at expected path: $DeployRiPXEWSPath" -ForegroundColor Green
+            #Confirm the 2 server avariables are not the default anyt longer
+            $DefaultServerVar = 'https://server.company.com'
+            $ServerVar1 = '$2pxeserver'
+            $ServerVar2 = '$deployrserver'
+            $DeployRiPXEWSContent = get-content $DeployRiPXEWSPath -Raw
+            if ($DeployRiPXEWSContent -match [regex]::Escape($ServerVar1) -and $DeployRiPXEWSContent -match [regex]::Escape($ServerVar2)) {
+                Write-Host "DeployR iPXE WS script still contains default server variables. Please update these to point to your environment's DeployR Server and 2PXE Server." -ForegroundColor Yellow
+                Write-Host "Default Server Variable 1: $ServerVar1" -ForegroundColor Yellow
+                Write-Host "Default Server Variable 2: $ServerVar2" -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "DeployR iPXE WS script does not contain default server variables." -ForegroundColor Green
+            }
+        }
+        else {
+            Write-Host "DeployR iPXE WS script not found at expected path: $DeployRiPXEWSPath. Please ensure it is present for proper iPXE WS functionality with DeployR." -ForegroundColor Yellow
+            Write-Host "Get the latest copy here: https://github.com/2pintsoftware/2Pint-iPXEAnywhere/blob/main/Scripts/Custom/DeployR.ps1" -ForegroundColor Cyan
+        }
     }
 }
 else {
