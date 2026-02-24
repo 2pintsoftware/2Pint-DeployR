@@ -37,6 +37,7 @@ Change Log
 - 2026.02.17 - Added Freespace check on the Volume the DeployR Content is located
 - 2026.02.17 - Added check for .net 4.8 on 2019 ServerOS
 - 2026.02.24 - Added iPXE & 2PXE Apps to list, noted as OPTIONAL
+- 2026.02.24 - Added check for matching certificate thumbprints between iPXE WS and 2PXE if both are installed
 
 
 To DO
@@ -920,7 +921,7 @@ if ($ServerOSVersion -like "10.0.17763*") {
             Write-Host ".NET Framework Version: $version (Release: $release)"
             if ($release -ge 528040) {
                 Write-Host ".NET Framework 4.8 or later is installed." -ForegroundColor Green
-        }   
+            }   
         } else {
             Write-Host ".NET Framework 4.5+ not found." -ForegroundColor Red
         }
@@ -1141,7 +1142,8 @@ if ($Installed_2Pint_Software_StifleR_Server){
     $StifleRCertThumbprint = $StifleRRegData.WSCertificateThumbprint
     Write-Host "StifleR Using Certificate with Thumbprint: $($StifleRCertThumbprint)" -ForegroundColor Cyan
     #Get Certificate from Local Machine Store that matches
-    $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My  | Where-Object { $_.Thumbprint -match $StifleRCertThumbprint }
+    $AllLocalCerts = Get-ChildItem -Path Cert:\LocalMachine\My
+    $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $StifleRCertThumbprint }
     if ($CertThumbprint) {
         Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
         write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -1448,13 +1450,13 @@ if ($Installed_2Pint_Software_DeployR){
     
 }
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Cyan
+write-host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Magenta
 # Get the certificate hash from the HTTP.SYS binding for port 443
 $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:443 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 443): $certHash" -ForegroundColor Green
+    Write-Host  "Certificate Thumbprint for HTTPS (port 443): $certHash" -ForegroundColor Cyan
     if ($certHash -eq $CertThumbprintRegValue) {
         Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
     }
@@ -1480,12 +1482,32 @@ $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 9000): $certHash" -ForegroundColor Green
+    Write-Host  "Certificate Thumbprint for HTTPS (port 9000 StifleR): $certHash" -ForegroundColor Cyan
     if ($certHash -eq $CertThumbprintRegValue) {
         Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
+        if ($CertThumbprint) {
+            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "Certificate NOT found." -ForegroundColor Red
+        }
     }
     else {
         Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
+        if ($CertThumbprint) {
+            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "Certificate NOT found." -ForegroundColor Red
+        }
     }
 } else {
     Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
@@ -1502,16 +1524,24 @@ if ($certHash) {
     }
     if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
 }
-$certHash = $Null
-$certHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 8051): $certHash" -ForegroundColor Green
-    if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+
+if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
+    $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+    if ($iPXEcertHash) {
+        Write-Host  "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
+
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $iPXEcertHash }
+        if ($CertThumbprint) {
+            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "Certificate NOT found." -ForegroundColor Red
+        }
     }
-    else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
-    }
+    
 } else {
     Write-Host  "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
     # Fallback: Scan common IPs (adjust as needed)
@@ -1526,32 +1556,48 @@ if ($certHash) {
         }
     }
     if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+    
 }
-$certHash = $Null
-$certHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
-if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 8050): $certHash" -ForegroundColor Green
-    if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
-    }
-    else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
-    }
-} else {
-    Write-Host  "No SSL binding found for port 8050. Trying all IPs..." -ForegroundColor Yellow
-    # Fallback: Scan common IPs (adjust as needed)
-    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
-    $found = $false
-    foreach ($ip in $ips) {
-        $hash = netsh http show sslcert ipport="$ip`:8050" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-        if ($hash) {
-            Write-Host "Certificate Thumbprint for HTTPS (port 8050) on $ip`: $hash" -ForegroundColor Yellow
-            $found = $true
-            break
+if ($Installed_2Pint_Software_PXE_Server -eq $true){
+    $2PXEcertHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+    
+    if ($2PXEcertHash) {
+        Write-Host  "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
+
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $2PXEcertHash }
+        if ($CertThumbprint) {
+            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
         }
+        else {
+            Write-Host "Certificate NOT found." -ForegroundColor Red
+        }
+    } else {
+        Write-Host  "No SSL binding found for port 8050. Trying all IPs..." -ForegroundColor Yellow
+        # Fallback: Scan common IPs (adjust as needed)
+        $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
+        $found = $false
+        foreach ($ip in $ips) {
+            $hash = netsh http show sslcert ipport="$ip`:8050" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+            if ($hash) {
+                Write-Host "Certificate Thumbprint for HTTPS (port 8050) on $ip`: $hash" -ForegroundColor Yellow
+                $found = $true
+                break
+            }
+        }
+        if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
     }
-    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+}
+if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true)){
+        if ($2PXEcertHash -eq $iPXEcertHash) {
+            Write-Host "The certificate hash matches (2PXE & iPXE WS)." -ForegroundColor Green
+        }
+        else {
+            Write-Host "The certificate hashes are different between 2PXE & iPXE WS." -ForegroundColor Red
+        }
 }
 #Testing Firewall Rules:
 
