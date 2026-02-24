@@ -89,6 +89,113 @@ $FirewallRules = @(
 )
 
 #region Functions
+
+function Test-CertificateChain {
+    <#
+    .SYNOPSIS
+        Builds and validates the certificate chain for a given certificate (by thumbprint)
+        and returns detailed results as a structured object.
+
+    .PARAMETER Thumbprint
+        The thumbprint of the certificate in the Local Machine\Personal store (without spaces).
+
+    .PARAMETER RevocationMode
+        How to check revocation (Online, Offline, NoCheck). Default: Online.
+
+    .EXAMPLE
+        Test-CertificateChain -Thumbprint "a1b2c3d4e5f67890..." | Format-List
+
+    .EXAMPLE
+        $result = Test-CertificateChain -Thumbprint "..." -RevocationMode Offline
+        $result.ChainValid
+        $result.ChainElements
+        $result.ChainErrors
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+        [string]$Thumbprint,
+
+        [ValidateSet('Online', 'Offline', 'NoCheck')]
+        [string]$RevocationMode = 'Online',
+
+        [System.Security.Cryptography.X509Certificates.X509VerificationFlags]$VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
+    )
+
+    # Normalize thumbprint (remove any spaces just in case)
+    $Thumbprint = $Thumbprint -replace '\s', ''
+
+    # Try to get the certificate
+    $certPath = "Cert:\LocalMachine\My\$Thumbprint"
+    $cert = Get-Item $certPath -ErrorAction SilentlyContinue
+
+    if (-not $cert) {
+        return [PSCustomObject]@{
+            Thumbprint     = $Thumbprint
+            Found          = $false
+            ErrorMessage   = "Certificate with thumbprint $Thumbprint not found in LocalMachine\My"
+            ChainValid     = $false
+            ChainElements  = @()
+            ChainErrors    = @()
+            RawChain       = $null
+        }
+    }
+
+    # Build the chain
+    $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+
+    # Set revocation checking
+    switch ($RevocationMode) {
+        'Online'  { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Online }
+        'Offline' { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Offline }
+        'NoCheck' { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck }
+    }
+
+    $chain.ChainPolicy.VerificationFlags = $VerificationFlags
+
+    $buildSuccess = $chain.Build($cert)
+
+    # Collect chain elements
+    $elements = @()
+    foreach ($element in $chain.ChainElements) {
+        $elements += [PSCustomObject]@{
+            Subject    = $element.Certificate.Subject
+            Issuer     = $element.Certificate.Issuer
+            Thumbprint = $element.Certificate.Thumbprint
+            NotAfter   = $element.Certificate.NotAfter
+            IsRoot     = $element.Certificate.Subject -eq $element.Certificate.Issuer
+            HasPrivateKey = $element.Certificate.HasPrivateKey
+        }
+    }
+
+    # Collect any chain status errors
+    $errors = @()
+    foreach ($status in $chain.ChainStatus) {
+        $errors += [PSCustomObject]@{
+            Status           = $status.Status.ToString()
+            StatusInformation = $status.StatusInformation
+        }
+    }
+
+    # Final result object
+    $result = [PSCustomObject]@{
+        Thumbprint       = $cert.Thumbprint
+        Subject          = $cert.Subject
+        Issuer           = $cert.Issuer
+        NotAfter         = $cert.NotAfter
+        Found            = $true
+        ChainValid       = $buildSuccess
+        RevocationMode   = $RevocationMode
+        ChainElements    = $elements
+        ChainErrors      = $errors
+        ChainElementCount = $elements.Count
+        RawChain         = $chain
+    }
+
+    return $result
+}
 function Get-SqlInstances {
     <#
     .SYNOPSIS
@@ -198,7 +305,7 @@ function Get-SqlInstances {
         }
     }
     catch {
-        Write-Error "Failed to enumerate SQL instances: $_"
+        Write-Error "Failed to enumerate SQL instances $_"
     }
     
     if ($instances.Count -eq 0) {
