@@ -474,7 +474,7 @@ function Test-SQLConnection {
     try {
         $connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
         $connection.Open()
-        Write-Host "Connection successful!" -ForegroundColor Green
+        Write-Host " Connection successful!" -ForegroundColor Green
         $connection.Close()
     }
     catch {
@@ -1265,18 +1265,18 @@ if ($Installed_2Pint_Software_StifleR_Server){
     Write-Host "Checking for StifleRDashboard Web Virtual Directory..." -ForegroundColor Cyan
     
     try {
-        $vdir = Get-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard" -ErrorAction SilentlyContinue
-        if ($vdir) {
-            Write-Host "✓ StifleRDashboard Web Virtual Directory exists in Default Web Site." -ForegroundColor Green
-            Write-Host "  Physical Path: $($vdir.PhysicalPath)" -ForegroundColor DarkGray
-        } else {
-            Write-Host "✗ StifleRDashboard Web Virtual Directory is NOT present in Default Web Site." -ForegroundColor Red
-            Write-Host "Remediation: Run the following command:" -ForegroundColor Yellow
-            Write-Host "New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'" -ForegroundColor DarkGray
-            $IISVirtualDirMissing = $true
-        }
+        $vdir = Get-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard"
     } catch {
         Write-Host "Error checking for StifleRDashboard Web Virtual Directory: $_" -ForegroundColor Red
+    }
+    if ($vdir) {
+        Write-Host "✓ StifleRDashboard Web Virtual Directory exists in Default Web Site." -ForegroundColor Green
+        Write-Host "  Physical Path: $($vdir.PhysicalPath)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "✗ StifleRDashboard Web Virtual Directory is NOT present in Default Web Site." -ForegroundColor Red
+        Write-Host "Remediation: Run the following command:" -ForegroundColor Yellow
+        Write-Host "New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'" -ForegroundColor DarkGray
+        $IISVirtualDirMissing = $true
     }
     Write-Host ""
     Write-Host "Confirm BackConnectionHostNames for Dashboard access... (prevent authentication loop)" -ForegroundColor Cyan
@@ -1374,8 +1374,14 @@ if ($Installed_2Pint_Software_StifleR_Server){
         if ($DashRegData.HubUrl -ne $ServerConfigJSON.server.hub) {
             Write-Host " Hub URL in Registry does not match Config file." -ForegroundColor Red
         }
+        else {
+            Write-Host " Hub URL in Registry matches Config file." -ForegroundColor Green
+        }
         if ($DashRegData.ServiceUrl -ne $ServerConfigJSON.server.controller) {
             Write-Host " Service URL in Registry does not match Config file." -ForegroundColor Red
+        }
+        else {
+            Write-Host " Service URL in Registry matches Config file." -ForegroundColor Green
         }
     }
 }
@@ -1393,6 +1399,23 @@ if ($Installed_2Pint_Software_DeployR){
         $DeployRRegData | Out-File -FilePath "$TempFolder\DeployR_Registry_Info.log" -Force -Encoding UTF8
         $DeployRCon
     }
+    #Test ServiceURL against Dashboard
+    if ($DeployRRegData -and $DeployRRegData.StifleRServerApiUrl) {
+        Write-Host " DeployR StifleRServerApiUrl: $($DeployRRegData.StifleRServerApiUrl)" -ForegroundColor Green
+        if (($DeployRRegData.StifleRServerApiUrl) -and ($DeployRRegData.StifleRServerApiUrl)){
+            if (($DeployRRegData.StifleRServerApiUrl) -match ($DeployRRegData.StifleRServerApiUrl)){
+                Write-Host " StifleR API URI matches in both Dashboard Registry & DeployR Registry" -foregroundColor Green
+            }
+            else{
+                Write-Host " StifleR API URI does NOT match between Dashboard Registry and DeployR Registry" -ForegroundColor Red
+                Write-Host "  Dashboard Registry URI: $($DashRegData.ServiceUrl)" -ForegroundColor DarkGray
+                Write-Host "  DeployR Registry URI: $($DeployRRegData.StifleRServerApiUrl)" -ForegroundColor DarkGray
+            }
+        }
+        write-host "-------------------------------------------------"  -ForegroundColor DarkGray
+    }
+
+
     if ($DeployRRegData -and $DeployRRegData.ContentLocation) {
         Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
         $DeployRContentPath = $DeployRRegData.ContentLocation
@@ -1420,12 +1443,13 @@ if ($Installed_2Pint_Software_DeployR){
                 Write-Host " Free space available at DeployR Content Location: $FreeSpaceGB GB" -ForegroundColor Red
             }
         }
+        write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
     
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
-            Write-Host "DeployR SQL Server Instance in Registry matches detected SQL Instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
+            Write-Host " DeployR SQL Server Instance in Registry matches detected SQL Instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
         }
         else {
             Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
@@ -1434,8 +1458,8 @@ if ($Installed_2Pint_Software_DeployR){
             Write-Host "      Detected Instance: $($SQLInstances.InstanceName)" -ForegroundColor DarkGray
             Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
         }
-        Write-Host "Testing DeployR SQL Connection string from Registry... " -ForegroundColor Cyan
-        write-host " $($DeployRRegData.ConnectionString)"
+        Write-Host " Testing DeployR SQL Connection string from Registry... " -ForegroundColor Cyan
+        write-host "  $($DeployRRegData.ConnectionString)"
         Test-SQLConnection -ConnectionString $DeployRRegData.ConnectionString
     }
     #Check SQL Principal Rights for NT AUTHORITY\SYSTEM

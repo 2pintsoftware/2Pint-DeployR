@@ -49,6 +49,9 @@ Function Find-EventLogs {
     param (
         [Parameter()]
         [switch]$Export,
+
+        [Parameter()]
+        [switch]$PassThru,
         
         [Parameter()]
         [string]$OutputDirectory = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs",
@@ -140,7 +143,9 @@ Function Find-EventLogs {
         Write-Host "`nExport complete! $exportCount log file(s) exported to: $OutputDirectory" -ForegroundColor Green
     }
     
-    return $foundLogs
+    if ($PassThru) {
+        return $foundLogs
+    }
 }
 
 
@@ -174,10 +179,18 @@ $ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 #Get DeployR Event Logs
 Find-EventLogs -Export -OutputDirectory $TempFolder -LogNameFilter "*DeployR*"
 
+#Get StifleR Event Logs (in case there are some that don't have DeployR in the name)
+Find-EventLogs -Export -OutputDirectory $TempFolder -LogNameFilter "*StifleR*"
+Write-Host "Event log export complete!" -ForegroundColor Green
+
 #Compress the logs into a zip file (with time stamp)
 $TimeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $ZipFilePath = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs_$TimeStamp.zip"
 if (Test-Path -Path $ZipFilePath){
     Remove-Item -Path $ZipFilePath -Force
 }
+Write-Host "`nCompressing logs into zip file: $ZipFilePath" -ForegroundColor Cyan
 Compress-Archive -Path "$TempFolder\*" -DestinationPath $ZipFilePath -Force 
+Write-Host "Compression complete! Logs saved to: $ZipFilePath" -ForegroundColor Green
+Write-Host "!!! Please send to support@2pintsoftware.com !!!" -ForegroundColor Magenta
+
