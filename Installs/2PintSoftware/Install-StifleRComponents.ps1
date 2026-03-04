@@ -1,5 +1,33 @@
 
 #region Functions
+
+Function Get-ActiveNetworkDomainSuffix {
+    [CmdletBinding()]
+    param()
+
+    try {
+        # Prefer an interface that has an IPv4 address and a default gateway (likely the active network)
+        $ipConfig = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {
+            ($_.IPv4Address -ne $null) -and ($_.IPv4DefaultGateway -ne $null)
+        } | Select-Object -First 1
+
+        if ($ipConfig -and $ipConfig.DnsSuffix -and $ipConfig.DnsSuffix.Trim() -ne '') {
+            return $ipConfig.DnsSuffix
+        }
+
+        # Fall back to connection-specific suffix from Get-DnsClient
+        $suffix = Get-DnsClient -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionSpecificSuffix -and $_.ConnectionSpecificSuffix.Trim() -ne '' } | Select-Object -ExpandProperty ConnectionSpecificSuffix -First 1
+        if ($suffix) { return $suffix }
+
+        # Last-resort: try WMI/CIM property
+        $wmiSuffix = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "IPEnabled = 1" -ErrorAction SilentlyContinue | Where-Object { $_.DNSSuffix -and $_.DNSSuffix.Trim() -ne '' } | Select-Object -ExpandProperty DNSSuffix -First 1
+        return $wmiSuffix
+    }
+    catch {
+        return $null
+    }
+}
+
 Function Get-FQDNFrom2PXEConfig {
     param (
         [string]$configFilePath = "C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config"

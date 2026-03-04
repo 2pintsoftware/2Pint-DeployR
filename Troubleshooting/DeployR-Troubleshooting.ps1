@@ -329,7 +329,7 @@ function Get-InstalledApps
     
     # Get all installed apps, filter out those without InstallDate, and keep only the latest version of each
     $allApps = Get-ItemProperty $regpath | .{process{if($_.DisplayName -and $_.UninstallString) { $_ } }} | 
-    Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString
+    Select DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString, InstallLocation
     
     # Filter out apps without InstallDate and group by DisplayName to keep only the latest
     $filteredApps = $allApps | Where-Object { $_.InstallDate -and $_.InstallDate -ne '' } | 
@@ -1692,7 +1692,8 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
 
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
     $2PXEcertHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-    
+    $2PXEConfigFilePath = "C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config"
+
     if ($2PXEcertHash) {
         Write-Host  "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
 
@@ -1723,12 +1724,45 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
     }
 }
 if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true)){
-        if ($2PXEcertHash -eq $iPXEcertHash) {
-            Write-Host "The certificate hash matches (2PXE & iPXE WS)." -ForegroundColor Green
+    if ($2PXEcertHash -eq $iPXEcertHash) {
+        Write-Host "The certificate hash matches (2PXE & iPXE WS)." -ForegroundColor Green
+    }
+    else {
+        Write-Host "The certificate hashes are different between 2PXE & iPXE WS." -ForegroundColor Red
+    }
+    if (Test-Path -Path $2PXEConfigFilePath) {
+        Write-Host "------------------------------------" -ForegroundColor DarkGray
+        Write-Host "Checking Settings in 2PXE config file: $2PXEConfigFilePath" -ForegroundColor Cyan
+        $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
+        $2PXEConfigiPXEAnywhereWebServiceURI = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "iPXEAnywhereWebServiceURI" } | Select-Object -ExpandProperty value
+        if ($2PXEConfigiPXEAnywhereWebServiceURI) {
+            if ($DeployRURL){
+                if ($2PXEConfigiPXEAnywhereWebServiceURI -match $DeployRURL) {
+                    Write-Host "iPXEAnywhereWebServiceURI in 2PXE config matches DeployR Server URL." -ForegroundColor Green
+                    Write-Host " iPXEAnywhereWebServiceURI from 2PXE config file: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
+                }
+                else {
+                    Write-Host "iPXEAnywhereWebServiceURI in 2PXE config does NOT match DeployR Server URL." -ForegroundColor Red
+                    Write-Host "  iPXEAnywhereWebServiceURI: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
+                    Write-Host "  DeployR Server URL: $DeployRURL" -ForegroundColor DarkGray
+                }
+            }
         }
-        else {
-            Write-Host "The certificate hashes are different between 2PXE & iPXE WS." -ForegroundColor Red
+        else{
+            Write-Host "2PXE Config Missing Value for iPXEAnywhereWebServiceURI" -ForegroundColor Red
         }
+    }
+
+}
+if ($Installed_2Pint_Software_PXE_Server -eq $true){
+    if (Test-Path -Path $2PXEConfigFilePath) {
+        $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
+        $2PXEConfigExternalFQDNOverride = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "ExternalFQDNOverride" } | Select-Object -ExpandProperty value
+        Write-Host "Additional Config Settings:" -ForegroundColor Cyan
+        if ($2PXEConfigExternalFQDNOverride -ne $null -and $2PXEConfigExternalFQDNOverride -ne "") {
+            Write-Host " ExternalFQDNOverride in 2PXE config: $2PXEConfigExternalFQDNOverride" -ForegroundColor DarkGray
+        }
+    }
 }
 #Testing Firewall Rules:
 
