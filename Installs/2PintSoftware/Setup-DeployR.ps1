@@ -522,6 +522,37 @@ Write-Host "DeployR installation completed with exit code $($DeployRInstall.Exit
 
 Set-DeployRServerConfiguration -fqdn $fqdn
 
+#Approve with WMI Agent
+$WMIServiceInstalled = Get-Service -Name StifleRWmiAgent -ErrorAction SilentlyContinue
+if ($WMIServiceInstalled) {
+    Write-Host "StifleR WMI Agent service is installed. Attempting to approve DeployR via WMI..." -ForegroundColor Green
+    # Narrow to DeployR
+    $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction Stop
+    $DeployR = $InfraServices | Where-Object { $_.Type -eq 'DeployR' }
+
+    if (-not $DeployR) { Write-Error "No DeployR instance found in root\stifler\InfrastructureServices"; return }
+    $DeployR | Format-List *
+
+    # Call the Approve method on the instance
+    $result = Invoke-CimMethod -InputObject $DeployR -MethodName 'Approve'
+
+    # Inspect returned object (some CIM implementations return ReturnValue or other info)
+    $result | Format-List *
+
+    # Re-query to confirm status changed
+    Start-Sleep -Seconds 2
+    $DeployR2 = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler |
+            Where-Object { $_.Type -eq 'DeployR' }
+    $DeployR2 | Select-Object Type, Status, Name
+}
+else {
+    Write-Host "StifleR WMI Agent service is not installed. Cannot approve DeployR via WMI." -ForegroundColor Yellow
+    exit 0
+}
+
+
+
+
 
 #Approve DeployR in Dashboard (DOESN"T WORK YET)
 <#
