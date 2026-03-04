@@ -6,9 +6,9 @@ You can open the script and paste them into your environment, or run the powersh
 ## Order
 
 - Install-PowerShell74X.ps1
-  ```
-  iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
-  ```
+```
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
+```
 - Install-DotNetRuntimes80X.ps1
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes80X.ps1)
@@ -26,8 +26,7 @@ iex (irm <https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/hea
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQL2025CU.ps1)
 ```
   - Reboot
-- Install-WindowsADK.ps1
-- 
+- Install-WindowsADK.ps1 
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WindowsADK.ps1)
 ```
