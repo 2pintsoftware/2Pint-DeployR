@@ -250,6 +250,7 @@ function Set-DeployRServerConfiguration  {
     }
     else {
         $targetbackuppath = 'C:\DeployRBackups'
+        $targetContentLib = 'C:\DeployRContentLib'
         $targetSources = 'C:\DeployRSources'
         $driveLetter = 'C:'
     }
