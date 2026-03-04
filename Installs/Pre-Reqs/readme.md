@@ -15,7 +15,7 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 - Install-WinFeatures.ps1
 ```
-iex (irm <https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures.ps1)
 ```
 - Install-SQLExpress2025.ps1
 ```
