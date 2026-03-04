@@ -30,8 +30,10 @@ Uses TSEnv values for FormFQDN and FormInstall2PXE.
 
 
 NOTE, FQDN is super important to ensure certificates work properly, so if not running in DeployR or if the domain suffix cannot be determined, the script will prompt for a domain name to use for the FQDN.
-
+ASSUME you've downloaded the DeployR Suite, extracted the 2Pint Software zips to $env:USERPROFILE\Downloads\DeployRSuite\Extracted, and placed the Install-2PXE.ps1 script in the same folder as the 2PXE MSI file before running this script.
 #>
+
+$sourceFolder = "$env:USERPROFILE\Downloads\DeployRSuite\Extracted"
 
 #region functions
 Function Get-ActiveNetworkDomainSuffix {
@@ -315,10 +317,37 @@ else{
 }
 
 $WorkingDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+if ($WorkingDir){
+    if (!(Test-Path -Path $WorkingDir)) {
+        Write-Host "Script directory not found: $WorkingDir"
+    }
+    $MSIFiles = Get-ChildItem -Path $WorkingDir -Filter *.msi
+}
 
-$MSIFiles = Get-ChildItem -Path $WorkingDir -Filter *.msi | Select-Object -First 1
+
+if (!$MSIFiles) {
+    Write-Host "No MSI files found in script directory: $WorkingDir"
+    write-Host "Falling back to target folder: $sourceFolder if it exists." -ForegroundColor Yellow
+    if (Test-Path -Path $sourceFolder) {
+        $MSIFiles = Get-ChildItem -Path $sourceFolder -Filter *.msi
+        if (!$MSIFiles) {
+            Write-Host "No MSI files found in target folder: $sourceFolder"
+            exit 1
+        } else {
+            Write-Host "Found MSI files in target folder: $sourceFolder" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "Target folder not found: $sourceFolder"
+        exit 1
+    }
+}
 
 $2PXE = $MSIFiles | Where-Object { $_.Name -like "*2PXE*.msi" } | Select-Object -First 1
-
+if (!$2PXE) {
+    Write-Host "No MSI file matching *2PXE*.msi found in script directory or target folder."
+    exit 1
+} else {
+    Write-Host "Found 2PXE MSI: $($2PXE.FullName)" -ForegroundColor Green
+}
 Install-2PXE -msifile $2PXE.FullName -fqdn $FQDN
 Import-2PXERootCA
