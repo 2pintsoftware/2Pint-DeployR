@@ -29,6 +29,8 @@ Order of Install:
 
 ## Scripts for Automated Install
 
+You can download the scripts and run them, or run the iex (irm) commands directly assuming you don't block GitHub.  Run from the Elevated PS7 Console.
+
 - Install-2PXE.ps1
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Install-2PXE.ps1)
@@ -48,7 +50,14 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Install-StifleRComponents.ps1)
 ```
+
 - Setup-DeployR.ps1
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Setup-DeployR.ps1)
+```
+
+
+- PopulateDeployRExtras.ps1 - NOTE: Run on Server from Elevated PS7 Terminal.
+```
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/PopulateDeployRExtras.ps1)
 ```
