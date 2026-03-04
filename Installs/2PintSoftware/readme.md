@@ -42,3 +42,7 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Create-IIS443Binding.ps1)
 ```
+- Install-StifleRComponents.ps1
+```
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Install-StifleRComponents.ps1)
+```
