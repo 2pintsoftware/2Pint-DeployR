@@ -19,7 +19,7 @@ iex (irm <https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/hea
 ```
 - Install-SQLExpress2025.ps1
 ```
-  - iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQLExpress2025.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQLExpress2025.ps1)
 ```
 - Install-SQL2025CU.ps1
 ```
@@ -32,19 +32,19 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 - Install-WindowsADKWinPE.ps1
 ```
-  - iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WindowsADKWinPE.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WindowsADKWinPE.ps1)
 ```
 - Install-VCRedist-x64.ps1
 ```
-  - iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-VCRedist-x64.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-VCRedist-x64.ps1)
 ```
 - Configure-SQLExpress.ps1
 ```
-  - iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Configure-SQLExpress.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Configure-SQLExpress.ps1)
 ```
 - Install-SSMS22.ps1
 ```
-  - iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SMSS22.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SMSS22.ps1)
 ```
   
 ## 2Pint Software Installs
