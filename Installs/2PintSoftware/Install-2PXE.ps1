@@ -1,14 +1,66 @@
-<# 2Pint Software 2PXE Installer Functions
-Run the script which will enable these functions.
+<#
+.SYNOPSIS
+Installs 2Pint 2PXE and imports the 2PXE root certificate.
 
-Usage Example:
-Install-2PXE -msifile (path to the 2PXE MSI file) -fqdn (FQDN of the server)
+.DESCRIPTION
+This script locates a 2PXE MSI in the script directory, builds/install parameters,
+installs the 2PXE service silently, and imports the 2PXE CA certificate into the
+Local Machine Trusted Root Certification Authorities store.
+Can be used in DeployR task sequences or run standalone.
 
-Install-2PXE -msifile "C:\Installers\2Pint Software 2PXE Service (x64).msi" -fqdn "deployr.2pintlabs.com"
+If the DeployR.Utility module is available, task sequence environment variables are
+used for FQDN/input values; otherwise, fallback test values are used.
+
+.NOTES
+Author          : Phil Wilcock, Mike Terrill
+Maintainer      : 2Pint Software
+Repository      : 2Pint-DeployR
+Script          : Install-2PXE.ps1
+Requires        : PowerShell 5.1+ (Windows), Administrative privileges
+Last Updated    : 2026-03-03
+
+.EXAMPLE
+.\Install-2PXE.ps1
+Runs the script in standalone mode and installs using the first matching *2PXE*.msi
+in the same folder.
+
+.EXAMPLE
+Run as part of a task sequence where DeployR.Utility is available.
+Uses TSEnv values for FormFQDN and FormInstall2PXE.
 
 
+NOTE, FQDN is super important to ensure certificates work properly, so if not running in DeployR or if the domain suffix cannot be determined, the script will prompt for a domain name to use for the FQDN.
 
 #>
+
+#region functions
+Function Get-ActiveNetworkDomainSuffix {
+    [CmdletBinding()]
+    param()
+
+    try {
+        # Prefer an interface that has an IPv4 address and a default gateway (likely the active network)
+        $ipConfig = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {
+            ($_.IPv4Address -ne $null) -and ($_.IPv4DefaultGateway -ne $null)
+        } | Select-Object -First 1
+
+        if ($ipConfig -and $ipConfig.DnsSuffix -and $ipConfig.DnsSuffix.Trim() -ne '') {
+            return $ipConfig.DnsSuffix
+        }
+
+        # Fall back to connection-specific suffix from Get-DnsClient
+        $suffix = Get-DnsClient -ErrorAction SilentlyContinue | Where-Object { $_.ConnectionSpecificSuffix -and $_.ConnectionSpecificSuffix.Trim() -ne '' } | Select-Object -ExpandProperty ConnectionSpecificSuffix -First 1
+        if ($suffix) { return $suffix }
+
+        # Last-resort: try WMI/CIM property
+        $wmiSuffix = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "IPEnabled = 1" -ErrorAction SilentlyContinue | Where-Object { $_.DNSSuffix -and $_.DNSSuffix.Trim() -ne '' } | Select-Object -ExpandProperty DNSSuffix -First 1
+        return $wmiSuffix
+    }
+    catch {
+        return $null
+    }
+}
+
 Function Install-2PXE {
     [CmdletBinding()]
     param (
@@ -61,7 +113,7 @@ if (!(Test-Path $msifile)) {
 
     # This will use the connection specific suffix for the fqdn - useful when system is not domain joined
     if (!$domain) {
-        $domain = [string](Get-DnsClient | Select-Object -ExpandProperty ConnectionSpecificSuffix)
+        $domain = Get-ActiveNetworkDomainSuffix
     }
     if ($($domain.Trim()) -eq ""){
         Write-Host "No domain suffix found. Please provide a domain name."
@@ -118,6 +170,8 @@ if (!(Test-Path $msifile)) {
     # "RUN_TFTP_SERVER=`"1`""                                  # 2PXE has a built-in TFTP server 1 for ON 0 for OFF
     # "RUN_HTTP_SERVER=`"1`""                                  # 2PXE WebService for iPXE integration 1 for ON 0 for OFF
     "EMBEDDEDSDI=`"0`""                                      # Use an embedded boot.sdi image. See full documentation for more info
+    "ExternalFQDNOverride=`"$fqdn`""                        # Use this FQDN for iPXE Anywhere Web Service calls instead of the local system FQDN
+    # "TFTPROOTPATH=`"C:\MyTFTPRoot`""
     # "F12TIMEOUT=`"10000`""                                   # F12 prompt timout for iPXE loaders for non mandatory deployements in milliseconds.
     # "IPXELOADERS=`"1`""                                      # Use iPXE Boot Loaders 1 to enable and 0 to disable. If 0 2PXE will use Windows boot loaders
     # "UNKNOWNSUPPORT=`"1`""                                   # 1 for enable (default) 0 to disable - enables Unknown Machine support in ConfigMgr
@@ -229,4 +283,42 @@ Function Import-2PXERootCA {
         Write-Warning "Verification: Certificate with thumbprint $($certificate.Thumbprint) was not found in the Trusted Root store."
     }
 }
+#endregion
 
+try {
+    Import-Module DeployR.Utility -ErrorAction SilentlyContinue
+}
+catch {
+    Write-Warning "DeployR.Utility module not found. Environment variables will be set in the standard environment."
+}
+
+if (Get-Module -name "DeployR.Utility"){
+    write-Host "Using DeployR.Utility Module to get FQDN and Install2PXE values" -ForegroundColor Green
+    $FQDN = ${TSEnv:FormFQDN}
+    $Install2PXE = ${TSEnv:FormInstall2PXE}
+    write-Host "FQDN = $(${TSEnv:FormFQDN})" -ForegroundColor Green
+    write-Host "Install2PXE = $Install2PXE" -ForegroundColor Green
+}
+else{
+    Write-Host "Using Test Values for FQDN and Install2PXE" -ForegroundColor Yellow
+    $Hostname = $env:COMPUTERNAME
+    $DomainSuffix = Get-ActiveNetworkDomainSuffix
+    if (!$DomainSuffix) {
+        Write-Host "No domain suffix found. Please provide a domain name."
+        #prompt user for domain name
+        $DomainSuffix = Read-Host "Enter the domain name to use for FQDN (e.g., example.com)"
+    }
+    $FQDN = "$Hostname.$DomainSuffix"
+    $Install2PXE = $true
+    write-Host "FQDN = $FQDN" -ForegroundColor Yellow
+    write-Host "Install2PXE = $Install2PXE" -ForegroundColor Yellow
+}
+
+$WorkingDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+
+$MSIFiles = Get-ChildItem -Path $WorkingDir -Filter *.msi | Select-Object -First 1
+
+$2PXE = $MSIFiles | Where-Object { $_.Name -like "*2PXE*.msi" } | Select-Object -First 1
+
+Install-2PXE -msifile $2PXE.FullName -fqdn $FQDN
+Import-2PXERootCA
