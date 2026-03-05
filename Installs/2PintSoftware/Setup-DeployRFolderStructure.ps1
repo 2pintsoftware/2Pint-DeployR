@@ -1,5 +1,11 @@
-$DeployRRegInfo = Get-ItemPropertyValue -Path "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings" -Name 'ContentLocation'
-$DeployRSourcesPath = $DeployRRegInfo
+<#This will generate a folder structure for the DeployR sources, which can be used to organize the files needed for deployment. 
+It will also copy the CM Trace executable and the 2PXE certificate (if it exists) to the appropriate locations within the WinPEContent folder.
+
+Remember, DeployR has no tie back to this, it's just nice to keep track of sources for the ability to easily reference them or make edits and re-upload to DeployR when needed.
+
+UPDATE Variable: $DeployRSourcesPath to the desired location for the source files.
+#>
+$DeployRSourcesPath = "E:\DeployRSources"
     
     Write-Host "Creating source directory structure in $DeployRSourcesPath..." -ForegroundColor Cyan
     
@@ -60,7 +66,9 @@ $DeployRSourcesPath = $DeployRRegInfo
         Copy-Item -Path $sourceCMTracePath -Destination $destCMTracePath -Force -ErrorAction Stop
         Write-Host "Copied CM Trace to $destCMTracePath" -ForegroundColor Green
     } else {
-        Write-Host "CM Trace not found at $sourceCMTracePath - skipping copy" -ForegroundColor Yellow
+        Write-Host "CM Trace not found at $sourceCMTracePath - Downloading instead" -ForegroundColor Yellow
+        Invoke-WebRequest -Uri "https://patchmypc.com/cmtrace" -OutFile $destCMTracePath -ErrorAction Stop
+        Write-Host "Downloaded CM Trace to $destCMTracePath" -ForegroundColor Green
     }
     # Copy 2PXE certificate to WinPEContent\Certificates if it exists
     $sourceCertPath = "C:\Program Files\2Pint Software\2PXE\x64\ca.crt"

@@ -378,7 +378,9 @@ function Set-DeployRServerConfiguration  {
         Copy-Item -Path $sourceCMTracePath -Destination $destCMTracePath -Force -ErrorAction Stop
         Write-Host "Copied CM Trace to $destCMTracePath" -ForegroundColor Green
     } else {
-        Write-Host "CM Trace not found at $sourceCMTracePath - skipping copy" -ForegroundColor Yellow
+        Write-Host "CM Trace not found at $sourceCMTracePath - Downloading instead" -ForegroundColor Yellow
+        Invoke-WebRequest -Uri "https://patchmypc.com/cmtrace" -OutFile $destCMTracePath -ErrorAction Stop
+        Write-Host "Downloaded CM Trace to $destCMTracePath" -ForegroundColor Green
     }
     # Copy 2PXE certificate to WinPEContent\Certificates if it exists
     $sourceCertPath = "C:\Program Files\2Pint Software\2PXE\x64\ca.crt"
