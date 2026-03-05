@@ -338,12 +338,12 @@ function Set-DeployRServerConfiguration  {
     "Applications\VSCode",
     
     # OSPackages folders
-    "OSPackages\ClientOS\Win1123H2",
-    "OSPackages\ClientOS\Win1124H2",
-    "OSPackages\ClientOS\Win1125H2",
-    "OSPackages\ServerOS\Server2019",
-    "OSPackages\ServerOS\Server2022",
-    "OSPackages\ServerOS\Server2025",
+    "OperatingSystems\ClientOS\Win1123H2",
+    "OperatingSystems\ClientOS\Win1124H2",
+    "OperatingSystems\ClientOS\Win1125H2",
+    "OperatingSystems\ServerOS\Server2019",
+    "OperatingSystems\ServerOS\Server2022",
+    "OperatingSystems\ServerOS\Server2025",
     
     # DriverPacks folders
     "DriverPacks\Dell",
