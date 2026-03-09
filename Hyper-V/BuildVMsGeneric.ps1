@@ -212,7 +212,7 @@ switch ($VMSwitches.Count) {
     do {
         $StartNumberPad = "{0:00}" -f $StartNumber
         #Checks for if Machine Name already exist in HyperV Host
-        if (("$($VMNamePreFix)$($StartNumberPad)" -in ($CurrentVMS.name)) -or ("$($VMNamePreFix)$($StartNumberPad)A" -in ($CurrentVMS.name)))
+        if ($CurrentVMS -and ("$($VMNamePreFix)$($StartNumberPad)" -in ($CurrentVMS.name) -or "$($VMNamePreFix)$($StartNumberPad)A" -in ($CurrentVMS.name)))
         {
             if ("$($VMNamePreFix)$($StartNumberPad)" -in ($CurrentVMS.name)){ 
                 Write-Host "Name $($VMNamePreFix)$($StartNumberPad) Exist on HyperV Host" -ForegroundColor Yellow
