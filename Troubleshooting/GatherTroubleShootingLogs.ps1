@@ -5,14 +5,16 @@ Ideally run the DeployR-Troubleshooting.ps1 script first to pull additional logs
 
 
 Change Log
- - 2026.2.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
+    - 2026.2.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
+    - 2026.3.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
 
 #>
 
 
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
-
+$EventLogsFolder = "$TempFolder\EventLogs"
+if (!(Test-Path -Path $EventLogsFolder)){New-Item -Path $EventLogsFolder -ItemType Directory -Force | Out-Null}
 
 Function Find-EventLogs {
     <#
@@ -60,30 +62,47 @@ Function Find-EventLogs {
         [string]$LogNameFilter = "*DeployR*"
     )
 
-    # Get all StifleR event log providers
     Write-Host "Searching for event logs matching: $LogNameFilter" -ForegroundColor Cyan
-    $Providers = Get-WinEvent -ListProvider $LogNameFilter -ErrorAction SilentlyContinue
-
-    if (-not $Providers) {
-        Write-Warning "No event log providers found matching '$LogNameFilter'"
-        return
-    }
 
     $foundLogs = @()
+    $logNamesToExport = @()
 
-    # Process each provider
-    foreach ($provider in $Providers) {
-        $providerName = $provider.ProviderName
-        $events = (Get-WinEvent -ListProvider $providerName -ErrorAction SilentlyContinue).Events
-        
-        if ($events) {
-            $logLinks = $provider.LogLinks.LogName
+    # --- Search by Provider Name ---
+    $Providers = Get-WinEvent -ListProvider $LogNameFilter -ErrorAction SilentlyContinue
+    if ($Providers) {
+        foreach ($provider in $Providers) {
+            $providerName = $provider.ProviderName
+            $events = (Get-WinEvent -ListProvider $providerName -ErrorAction SilentlyContinue).Events
             
-            foreach ($logLink in $logLinks) {
+            if ($events) {
+                $logLinks = $provider.LogLinks.LogName
+                foreach ($logLink in $logLinks) {
+                    if ($logNamesToExport -notcontains $logLink) {
+                        $logNamesToExport += $logLink
+                        $foundLogs += [PSCustomObject]@{
+                            Source      = 'Provider'
+                            ProviderName = $providerName
+                            LogName     = $logLink
+                            EventCount  = $events.Count
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # --- Search by Log Name (Channel) ---
+    # This catches logs visible in Event Viewer whose provider name doesn't match the filter
+    $LogChannels = Get-WinEvent -ListLog $LogNameFilter -ErrorAction SilentlyContinue
+    if ($LogChannels) {
+        foreach ($logChannel in $LogChannels) {
+            if ($logNamesToExport -notcontains $logChannel.LogName) {
+                $logNamesToExport += $logChannel.LogName
                 $foundLogs += [PSCustomObject]@{
-                    ProviderName = $providerName
-                    LogName = $logLink
-                    EventCount = $events.Count
+                    Source       = 'LogName'
+                    ProviderName = ($logChannel.ProviderNames -join ', ')
+                    LogName      = $logChannel.LogName
+                    EventCount   = $logChannel.RecordCount
                 }
             }
         }
@@ -95,7 +114,7 @@ Function Find-EventLogs {
         $foundLogs | Format-Table -AutoSize
     }
     else {
-        Write-Warning "No event logs found with events for providers matching '$LogNameFilter'"
+        Write-Warning "No event logs found matching '$LogNameFilter'"
         return
     }
 
@@ -110,33 +129,19 @@ Function Find-EventLogs {
         }
 
         $exportCount = 0
-        
-        # Export each event log
-        foreach ($provider in $Providers) {
-            $logName = $provider.ProviderName
-            $logFilePath = Join-Path -Path $OutputDirectory -ChildPath "$logName"
-            $events = (Get-WinEvent -ListProvider $logName -ErrorAction SilentlyContinue).Events
-            
-            if ($events) {
-                # Export event definitions to CSV
-                $events | Export-Csv -Path "$logFilePath.csv" -Force -NoTypeInformation
-                Write-Host "  Exported: $logName.csv" -ForegroundColor Gray
-                
-                # Export actual event logs
-                $logLinks = $provider.LogLinks.LogName
-                foreach ($logLink in $logLinks) {
-                    $safeLogName = $logLink.Replace('/', '_')
-                    $evtxFilePath = Join-Path -Path $OutputDirectory -ChildPath "$safeLogName"
-                    
-                    try {
-                        Start-Process wevtutil.exe -ArgumentList "export-log `"$logLink`" `"$evtxFilePath.evtx`"" -NoNewWindow -Wait -ErrorAction Stop
-                        Write-Host "  Exported: $safeLogName.evtx" -ForegroundColor Gray
-                        $exportCount++
-                    }
-                    catch {
-                        Write-Warning "  Failed to export: $logLink - $_"
-                    }
-                }
+
+        # Export each unique log channel as .evtx
+        foreach ($logName in $logNamesToExport) {
+            $safeLogName = $logName.Replace('/', '_')
+            $evtxFilePath = Join-Path -Path $OutputDirectory -ChildPath "$safeLogName.evtx"
+
+            try {
+                Start-Process wevtutil.exe -ArgumentList "export-log `"$logName`" `"$evtxFilePath`"" -NoNewWindow -Wait -ErrorAction Stop
+                Write-Host "  Exported: $safeLogName.evtx" -ForegroundColor Gray
+                $exportCount++
+            }
+            catch {
+                Write-Warning "  Failed to export: $logName - $_"
             }
         }
 
@@ -177,10 +182,14 @@ $ComputerInfo = Get-ComputerInfo
 $ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 
 #Get DeployR Event Logs
-Find-EventLogs -Export -OutputDirectory $TempFolder -LogNameFilter "*DeployR*"
+Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*DeployR*"
+
+#Get 2PXE | iPXE Event Logs
+Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*2PXE*"
+Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*iPXE*"
 
 #Get StifleR Event Logs (in case there are some that don't have DeployR in the name)
-Find-EventLogs -Export -OutputDirectory $TempFolder -LogNameFilter "*StifleR*"
+Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*StifleR*"
 Write-Host "Event log export complete!" -ForegroundColor Green
 
 #Compress the logs into a zip file (with time stamp)

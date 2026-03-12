@@ -64,6 +64,8 @@ else {
 Write-Host "Checking for Pre-Requisite Applications..." -ForegroundColor Cyan
 
 $installedApps = Get-InstalledApps
+$installedApps | ForEach-Object { $_; "----------------------------------------------------" }| Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
+
 $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "AppHost"}
 
 $PreReqAppsStatus = @()
