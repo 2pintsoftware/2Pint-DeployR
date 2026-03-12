@@ -1,10 +1,14 @@
 #This Script is designed to test a Windows Client you're looking to start a Task Sequence from
-
-
 $DeployRServerFQDN = 'dr.2pintlabs.com'
+
 
 $DotNetMinVersion = '8.0.21'
 $PowerShellMinVersion = '7.4.13'
+# Check for Administrator role
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script must be run as Administrator."
+    exit 1
+}
 
 #PowerShell Table of Pre-Req Applications:
 $PreReqApps = @(
@@ -34,8 +38,29 @@ function Get-InstalledApps {
 #endregion Functions
 
 #region Check Pre-Req Applications
+$TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
+if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
+$TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting.log"
+$InstalledAppsFilePath = "$TempFolder\InstalledApps.log"
+if (Test-Path -Path $TranscriptFilePath) {
+    Remove-Item -Path $TranscriptFilePath -Force
+}
+if (Test-Path -Path $InstalledAppsFilePath) {
+    Remove-Item -Path $InstalledAppsFilePath -Force
+}    
+Start-Transcript -Path $TranscriptFilePath -Force
 
 Write-Host "=========================================================================" -ForegroundColor DarkGray
+if ($DeployRServerFQDN -eq "dr.2pintlabs.com") {
+    Write-Host "WARNING: DeployR Server FQDN is set to the default value of 'dr.2pintlabs.com'." -ForegroundColor Yellow
+    Write-Host 'Please update the $DeployRServerFQDN variable in the script to point to your actual DeployR Server.' -ForegroundColor Yellow
+    stop-transcript
+    exit 1
+}
+else {
+    Write-Host "DeployR Server FQDN: $DeployRServerFQDN" -ForegroundColor Green
+}
+
 Write-Host "Checking for Pre-Requisite Applications..." -ForegroundColor Cyan
 
 $installedApps = Get-InstalledApps
@@ -257,6 +282,10 @@ catch {
     }
 }
 
+Write-Host "=========================================================================" -ForegroundColor DarkGray
+Stop-Transcript
+Write-Host ""
+Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 
 #endregion DeployR Server Connectivity
