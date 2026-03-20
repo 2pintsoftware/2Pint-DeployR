@@ -21,11 +21,25 @@ foreach ($Model in $SelectedModels) {
         if ($DriverPack) {
             $DownloadURL = $DriverPack.URL
             $FileName = $DownloadURL.Split("/")[-1]
-            Write-Output "Downloading Driver Pack for $($Model.Alias) $OS..."
-            #Use Start-BitsTransfer for reliable downloading
+            $Hash = $DriverPack.Hash
             $DestinationPath = Join-Path -Path $BuildFolderPath -ChildPath "$($Model.Alias)\$OS"
+            $FilePath = Join-Path -Path $DestinationPath -ChildPath $FileName
+            if (Test-Path -Path $FilePath) {
+                $FileHash = (Get-FileHash -Path $FilePath -Algorithm MD5).Hash
+                if ($FileHash -eq $Hash) {
+                    Write-Output "Driver Pack for $($Model.Alias) $OS already exists with correct hash, skipping download."
+                    continue
+                }
+                else {
+                    Write-Output "Driver Pack for $($Model.Alias) $OS exists but hash mismatch, re-downloading..."
+                }
+            }
+            else {
+                Write-Output "Downloading Driver Pack for $($Model.Alias) $OS..."
+            }
+            #Use Start-BitsTransfer for reliable downloading
             New-Item -Path $DestinationPath -ItemType Directory -Force | Out-Null    
-            Start-BitsTransfer -Source $DownloadURL -Destination (Join-Path -Path $DestinationPath -ChildPath $FileName)
+            Start-BitsTransfer -Source $DownloadURL -Destination $FilePath
 
         }
         else {
