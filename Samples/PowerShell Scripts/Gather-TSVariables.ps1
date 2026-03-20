@@ -288,7 +288,7 @@ Switch -Wildcard ($LocalInfo['Make']) {
 	# Closing for switch block
 }
 
-# Dump all items in hastable as TS VARs
+# Dump all items in hastable as TS VARs (Skipping for Testing outside DeployR, just return the hashtable)
 foreach ($i in $LocalInfo.GetEnumerator())
 {
 	# If value is null, skip and continue to next
@@ -300,10 +300,12 @@ foreach ($i in $LocalInfo.GetEnumerator())
 	# If it is add to $tenvlist instead
 	if ($i.Value -is [array])
 	{
-		Write-Host "Value for $($i.Name) is an array, adding to tsenvlist instead of tsenv"
+		#Write-Host "Value for $($i.Name) is an array, adding to tsenvlist instead of tsenv"
 		#Set-Item -Path tsenvlist:$($i.name) -Value $i.Value
 	} else {
-		Write-Host "Setting TS Variable for $($i.Name) with value $($i.Value)"
+		#Write-Host "Setting TS Variable for $($i.Name) with value $($i.Value)"
 		#Set-Item -Path tsenv:$($i.name) -Value $i.Value
 	}
 }
+#Updated for testing, just return the hashtable instead of setting TS Variables
+return $LocalInfo
