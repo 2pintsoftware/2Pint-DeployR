@@ -1,8 +1,10 @@
 #This script will read the JSON Catalog from Panasonic and download the latest driver packs for offline use with MDT or other deployment tools. 
 #It will also create a folder structure for the driver packs based on the models and operating systems.
 
+#To Import, take the Folder this creates, copy it to a Flash Drive, then on The DeployR Server, run the Import-DriversFromFolder script
 
-$BuildFolderPath = "C:\PanasonicDriverPacks" #Change this to your desired folder path for storing the driver packs
+
+$BuildFolderPath = "D:\PanasonicDriverPacks" #Change this to your desired folder path for storing the driver packs
 
 
 
@@ -47,3 +49,4 @@ foreach ($Model in $SelectedModels) {
         }
     }
 }
+

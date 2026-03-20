@@ -1,7 +1,9 @@
+#Set to the location you have the Driver Packs
+$BuildFolderPath = "D:\PanasonicDriverPacks" #Change this to your desired folder path for storing the driver packs
+$DeployRSourcesPath = "D:\DeployRSources\DriverPacks"
 
 
-
-
+#region Functions
 
 function Import-DriverPack {
     param (
@@ -229,3 +231,33 @@ function Import-PanasonicDriverPacks {
 }
 
 #endregion Panasonic Driver Packs Import
+
+#endregion Functions
+
+#Region "Do the Stuff"
+$DriverPackZips = Get-ChildItem -Path $BuildFolderPath -Recurse -Filter *.zip
+
+if ($DriverPackZips){
+    Write-Host "Driver Packs Found" -ForegroundColor Magenta
+    #Report Quick on what it found
+    foreach ($DriverPackZip in $DriverPackZips){
+        $PathParts = $DriverPackZip.DirectoryName -split '\\'
+        $ModelAlias = $PathParts[-2]
+        $OSVer = $PathParts[-1]
+        $DriverPackFile = $DriverPackZip.Name
+        Write-Host " Found Driver Pack $DriverPackFile" -ForegroundColor Cyan
+        Write-Host "  ModelAlias = $ModelAlias | OS = $OSVer" -ForegroundColor DarkCyan
+    }
+
+    #Start the Import into DeployR
+    Write-Host "Starting to Import into DeployR - Extract and Import"
+    foreach ($DriverPackZip in $DriverPackZips){
+        $PathParts = $DriverPackZip.DirectoryName -split '\\'
+        $ModelAlias = $PathParts[-2]
+        $OSVer = $PathParts[-1]
+        $DriverPackFile = $DriverPackZip.Name
+        $DriverPackFilePath = $DriverPackZip.FullName
+        Write-Host "Starting Driver Pack $DriverPackFile" -ForegroundColor Cyan
+        Import-PanasonicDriverPacks -CabPath $DriverPackFilePath -ModelAlias $ModelAlias -SourceFolder $DeployRSourcesPath
+    }
+}
