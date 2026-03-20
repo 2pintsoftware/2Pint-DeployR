@@ -300,8 +300,10 @@ foreach ($i in $LocalInfo.GetEnumerator())
 	# If it is add to $tenvlist instead
 	if ($i.Value -is [array])
 	{
-		Set-Item -Path tsenvlist:$($i.name) -Value $i.Value
+		Write-Host "Value for $($i.Name) is an array, adding to tsenvlist instead of tsenv"
+		#Set-Item -Path tsenvlist:$($i.name) -Value $i.Value
 	} else {
-		Set-Item -Path tsenv:$($i.name) -Value $i.Value
+		Write-Host "Setting TS Variable for $($i.Name) with value $($i.Value)"
+		#Set-Item -Path tsenv:$($i.name) -Value $i.Value
 	}
 }
