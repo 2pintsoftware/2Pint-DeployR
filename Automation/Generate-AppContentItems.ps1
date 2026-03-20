@@ -6,27 +6,27 @@ GreenShot hangs and waits for user input
 VLC is saying it's a 16bit app, so check the download
 
 .SYNOPSIS
-    Functions to retrieve the latest download URLs for popular applications.
+Functions to retrieve the latest download URLs for popular applications.
 
 .DESCRIPTION
-    This script provides functions to automatically find and return the latest download URLs for:
-    - Firefox
-    - Thunderbird
-    - Notepad++
-    - VLC Media Player
-    - 7-Zip
-    - GreenShot
-    - Paint.Net
+This script provides functions to automatically find and return the latest download URLs for:
+- Firefox
+- Thunderbird
+- Notepad++
+- VLC Media Player
+- 7-Zip
+- GreenShot
+- Paint.Net
 
 .NOTES
-    Author: Gary Blok
-    Date: November 3, 2025
+Author: Gary Blok
+Date: November 3, 2025
 
-    Updates
-    26.2.12 - Added Admin Check
-    26.2.17 - Added Tags for Apps (to easier pair with another thing I'm working on)
-    26.2.17 - Added Ability to set App Description seperate from Version Description (Version description is automatically set to the applcation version number)
-    26.2.19 - Removed Greenshot from the list (most of the code is still her, just preventing it from making an app), as it wasn't 100% silent install, causes issues in a TS
+Updates
+26.2.12 - Added Admin Check
+26.2.17 - Added Tags for Apps (to easier pair with another thing I'm working on)
+26.2.17 - Added Ability to set App Description seperate from Version Description (Version description is automatically set to the applcation version number)
+26.2.19 - Removed Greenshot from the list (most of the code is still her, just preventing it from making an app), as it wasn't 100% silent install, causes issues in a TS
 #>
 
 # Configure root download path
@@ -85,29 +85,29 @@ function Connect-ToDeployR {
 #Function to Create Apps in DeployR
 Function New-DeployRApp {
     Param (
-        [string]$AppName,
-        [string]$AppSourceFolder,
-        [string]$AppDescription = "No Description Provided",
-        [string]$AppVersionDescription = "No Description Provided",
-        [string]$InstallationCommandLine = ""
+    [string]$AppName,
+    [string]$AppSourceFolder,
+    [string]$AppDescription = "No Description Provided",
+    [string]$AppVersionDescription = "No Description Provided",
+    [string]$InstallationCommandLine = ""
     )
-
+    
     $NewDRCI = New-DeployRContentItem -Type Folder -Name $AppName -Description $AppDescription -Purpose Application
     New-DeployRContentItemVersion -ContentItemId $NewDRCI.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersionDescription
 }
 Function Test-DeployRAppExists {
     Param (
-        [string]$AppName,
-        [string]$AppVersion,
-        [Parameter(Mandatory=$false)]
-        [PSObject[]]$AllApps
+    [string]$AppName,
+    [string]$AppVersion,
+    [Parameter(Mandatory=$false)]
+    [PSObject[]]$AllApps
     )
-
+    
     # Use provided AllApps collection if available, otherwise query DeployR
     if ($null -eq $AllApps -or $AllApps.Count -eq 0) {
         $AllApps = Get-DeployRApplication
     }
-
+    
     $existingApp = $AllApps | Where-Object { $_.Name -eq $AppName } -ErrorAction SilentlyContinue
     if ($null -ne $existingApp) {
         if ($existingApp.versions.contentSize -eq '0'){
@@ -115,7 +115,7 @@ Function Test-DeployRAppExists {
             return $false
         }
         else {
-        $LatestVersion = ($existingApp.versions | Select-Object -ExpandProperty Description | Sort-Object -Descending | Select-Object -First 1)
+            $LatestVersion = ($existingApp.versions | Select-Object -ExpandProperty Description | Sort-Object -Descending | Select-Object -First 1)
             return [PSCustomObject]@{
                 Name          = $existingApp.Name
                 LatestVersion = $LatestVersion
@@ -129,25 +129,44 @@ Function Test-DeployRAppExists {
 
 Function Update-DeployRApp {
     Param (
-        [string]$AppName,
-        [string]$AppVersion = "No Description Provided",
-        [string]$AppSourceFolder,
-        [string]$InstallationCommandLine = "",
-        [Parameter(Mandatory=$false)]
-        [PSObject[]]$AllApps
+    [string]$AppName,
+    [string]$AppVersion = "No Description Provided",
+    [string]$AppSourceFolder,
+    [string]$InstallationCommandLine = "",
+    [Parameter(Mandatory=$false)]
+    [PSObject[]]$AllApps,
+    [switch]$NewVersion = $false #If not used, it will overright the current version instead of adding a new one.
     )
-
+    
     # Use provided AllApps collection if available, otherwise query DeployR
     if ($null -eq $AllApps -or $AllApps.Count -eq 0) {
-        $existingApp = Get-DeployRApplication -Name $AppName -ErrorAction Stop
+        $existingApp = Get-DeployRApplication  | Where-Object { $_.Name -eq $AppName } -ErrorAction Stop
     } else {
         $existingApp = $AllApps | Where-Object { $_.Name -eq $AppName } -ErrorAction SilentlyContinue | Select-Object -First 1
     }
     
     if ($null -ne $existingApp) {
-        Write-Host "Updating DeployR Application: $AppName"
-        $NewDRCIV = New-DeployRContentItemVersion -ContentItemId $existingApp.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersion
-    } else {
+        if ($NewVersion -eq $true){
+            Write-Host "Updating DeployR Application: $AppName"
+            $NewDRCIV = New-DeployRContentItemVersion -ContentItemId $existingApp.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersion
+        }
+        else {
+            Write-Host "Overwriting existing version for DeployR Application: $AppName"
+            $ExistingVersion = $existingApp.versions | Select-Object -First 1
+            if ($ExistingVersion) {
+                $ExistingVersion.installationCommandLine = $InstallationCommandLine
+                $ExistingVersion.description = $AppVersion
+                $ExistingVersion | Set-DeployRMetadata -Type ContentItemVersion
+                Update-DeployRContentItemContent -ContentId $ExistingVersion.contentItemId -ContentVersion $ExistingVersion.versionNo -SourceFolder $AppSourceFolder
+                # Optionally, you could add logic here to remove the old version if desired
+            }
+            else {
+                Write-Warning "No existing versions found for $AppName. Adding new version."
+                $NewDRCIV = New-DeployRContentItemVersion -ContentItemId $existingApp.id -SourceFolder $AppSourceFolder -InstallationCommandLine $InstallationCommandLine -Description $AppVersion
+            }
+        }
+    } 
+    else {
         Write-Host "DeployR Application not found: $AppName"
     }
 }
@@ -177,11 +196,11 @@ Function Confirm-DeployRAppTags {
 function Get-FirefoxLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64',
-        
-        [ValidateSet('en-US', 'de', 'fr', 'es-ES')]
-        [string]$Language = 'en-US'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64',
+    
+    [ValidateSet('en-US', 'de', 'fr', 'es-ES')]
+    [string]$Language = 'en-US'
     )
     
     try {
@@ -215,11 +234,11 @@ function Get-FirefoxLatestUrl {
 function Get-ThunderbirdLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64',
-        
-        [ValidateSet('en-US', 'de', 'fr', 'es-ES')]
-        [string]$Language = 'en-US'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64',
+    
+    [ValidateSet('en-US', 'de', 'fr', 'es-ES')]
+    [string]$Language = 'en-US'
     )
     
     try {
@@ -253,8 +272,8 @@ function Get-ThunderbirdLatestUrl {
 function Get-NotepadPlusPlusLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64'
     )
     
     try {
@@ -292,8 +311,8 @@ function Get-NotepadPlusPlusLatestUrl {
 function Get-VLCLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64'
     )
     
     try {
@@ -333,8 +352,8 @@ function Get-VLCLatestUrl {
 function Get-7ZipLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64'
     )
     
     try {
@@ -481,8 +500,8 @@ function Get-PaintDotNetLatestUrl {
 function Get-OBSStudioLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'arm64')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'arm64')]
+    [string]$Architecture = 'x64'
     )
     
     try {
@@ -525,8 +544,8 @@ function Get-OBSStudioLatestUrl {
 function Get-VSCodeLatestUrl {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'arm64')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'arm64')]
+    [string]$Architecture = 'x64'
     )
     
     try {
@@ -541,8 +560,12 @@ function Get-VSCodeLatestUrl {
         # Get version from the updates page
         $updatesPage = Invoke-WebRequest -Uri "https://code.visualstudio.com/updates" -UseBasicParsing -ErrorAction Stop
         
-        # Extract version from the page title or header (e.g., "September 2025 (version 1.105)")
-        if ($updatesPage.Content -match 'version\s+([\d.]+)') {
+        # Prefer the structured JSON-LD `softwareVersion` if present, else fallback to
+        # a loose 'version' match in the page content (e.g., "(version 1.105)").
+        if ($updatesPage.Content -match '"softwareVersion"\s*:\s*"([\d.]+)"') {
+            $version = $matches[1]
+        }
+        elseif ($updatesPage.Content -match 'version\s+([\d.]+)') {
             $version = $matches[1]
         }
         else {
@@ -569,8 +592,8 @@ function Get-VSCodeLatestUrl {
 function Get-AllLatestUrls {
     [CmdletBinding()]
     param(
-        [ValidateSet('x64', 'x86')]
-        [string]$Architecture = 'x64'
+    [ValidateSet('x64', 'x86')]
+    [string]$Architecture = 'x64'
     )
     
     Write-Host "`n=== Retrieving Latest Download URLs ===" -ForegroundColor Cyan
@@ -608,38 +631,38 @@ function Get-AllLatestUrls {
 function Save-AppInstaller {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
-        # Root folder that will contain AppName\Version
-        [Parameter(Mandatory, Position=0)]
-        [string]$RootPath,
-
-        # Either pass a PSCustomObject with AppName, Version, URL...
-        [Parameter(ParameterSetName='Object', Mandatory, ValueFromPipeline)]
-        [PSObject]$InputObject,
-
-        # ...or pass explicit fields
-        [Parameter(ParameterSetName='Fields', Mandatory)]
-        [string]$AppName,
-
-        [Parameter(ParameterSetName='Fields', Mandatory)]
-        [string]$Version,
-
-        [Parameter(ParameterSetName='Fields', Mandatory)]
-        [Uri]$Url,
-
-        # Overwrite existing file if present
-        [switch]$Force,
-
-        # BITS priority (Foreground is fastest)
-        [ValidateSet('Foreground','High','Normal','Low')]
-        [string]$BitsPriority = 'Foreground'
+    # Root folder that will contain AppName\Version
+    [Parameter(Mandatory, Position=0)]
+    [string]$RootPath,
+    
+    # Either pass a PSCustomObject with AppName, Version, URL...
+    [Parameter(ParameterSetName='Object', Mandatory, ValueFromPipeline)]
+    [PSObject]$InputObject,
+    
+    # ...or pass explicit fields
+    [Parameter(ParameterSetName='Fields', Mandatory)]
+    [string]$AppName,
+    
+    [Parameter(ParameterSetName='Fields', Mandatory)]
+    [string]$Version,
+    
+    [Parameter(ParameterSetName='Fields', Mandatory)]
+    [Uri]$Url,
+    
+    # Overwrite existing file if present
+    [switch]$Force,
+    
+    # BITS priority (Foreground is fastest)
+    [ValidateSet('Foreground','High','Normal','Low')]
+    [string]$BitsPriority = 'Foreground'
     )
-
+    
     begin {
         # Ensure root exists
         if (-not (Test-Path -Path $RootPath -PathType Container)) {
             New-Item -Path $RootPath -ItemType Directory -Force | Out-Null
         }
-
+        
         function Get-FileNameFromUrl {
             param([Uri]$ResolvedUrl, [string]$FallbackName)
             
@@ -707,7 +730,7 @@ function Save-AppInstaller {
             return "$FallbackName.exe"
         }
     }
-
+    
     process {
         # Normalize inputs for both parameter sets
         if ($PSCmdlet.ParameterSetName -eq 'Object') {
@@ -722,23 +745,23 @@ function Save-AppInstaller {
             $Ver = $Version
             $U   = $Url
         }
-
+        
         if (-not $App) { throw "AppName not provided." }
         if (-not $Ver) { throw "Version not provided." }
         if (-not $U)   { throw "URL not provided." }
         if (-not ($U.Scheme -in @('http','https'))) { throw "URL must be HTTP/HTTPS." }
-
+        
         $targetDir = Join-Path $RootPath $App | Join-Path -ChildPath $Ver
         if (-not (Test-Path $targetDir)) {
             if ($PSCmdlet.ShouldProcess($targetDir, "Create directory")) {
                 New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
             }
         }
-
+        
         $fallbackName = "$App-$Ver"
         $fileName = Get-FileNameFromUrl -ResolvedUrl $U -FallbackName $fallbackName
         $destPath = Join-Path $targetDir $fileName
-
+        
         if ((Test-Path $destPath) -and -not $Force) {
             Write-Verbose "File already exists, skipping: $destPath"
             
@@ -779,17 +802,17 @@ function Save-AppInstaller {
                 ActualInstallCommand = $installCmd
             }
         }
-
+        
         $jobName = "$App $Ver"
         if ($PSCmdlet.ShouldProcess($destPath, "BITS download from $($U.AbsoluteUri)")) {
             try {
                 # Ensure destination directory exists (in case of race)
                 New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-
+                
                 if ((Test-Path $destPath) -and $Force) {
                     Remove-Item -Path $destPath -Force -ErrorAction SilentlyContinue
                 }
-
+                
                 # Try BITS first
                 $bitsSuccess = $false
                 try {
@@ -819,7 +842,7 @@ function Save-AppInstaller {
                         throw "Both BITS and Invoke-WebRequest failed: $($_.Exception.Message)"
                     }
                 }
-
+                
                 # Extract ZIP file if downloaded
                 $extractedFiles = @()
                 $actualInstallerFileName = [System.IO.Path]::GetFileName($destPath)
@@ -849,7 +872,7 @@ function Save-AppInstaller {
                         Write-Warning "Failed to extract or cleanup ZIP file: $($_.Exception.Message)"
                     }
                 }
-
+                
                 # Build dynamic install command if one was provided
                 $installCmd = ""
                 if ($PSCmdlet.ParameterSetName -eq 'Object' -and $InputObject.SilentInstallCommand) {
@@ -858,7 +881,7 @@ function Save-AppInstaller {
                     # Replace the simple FILENAME placeholder with quoted actual installer filename
                     $installCmd = $installCmd -replace 'FILENAME', "`"$actualInstallerFileName`""
                 }
-
+                
                 return [PSCustomObject]@{
                     AppName        = $App
                     Version        = $Ver
@@ -919,7 +942,7 @@ if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.
     #Set-DeployRHost "http://localhost:7282"
     Connect-ToDeployR
     $AllApps = Get-DeployRApplication
-
+    
 } else {
     Write-Host "DeployR.Utility module not found. Please Where DeployR Server is installed to and update paths."
 }
