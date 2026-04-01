@@ -38,6 +38,7 @@ Change Log
 - 2026.02.17 - Added check for .net 4.8 on 2019 ServerOS
 - 2026.02.24 - Added iPXE & 2PXE Apps to list, noted as OPTIONAL
 - 2026.02.24 - Added check for matching certificate thumbprints between iPXE WS and 2PXE if both are installed
+- 2026.04.01 - Added Notes around IIS & MIME Type, reminders that it's optional
 
 
 To DO
@@ -1105,52 +1106,50 @@ if ($MissingComponents) {
     
 }
 
-Write-Host "=========================================================================" -ForegroundColor DarkGray
-Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
-Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, the required MIME types must be configured." -ForegroundColor Yellow
-# Table of required MIME types for iPXE and related boot files
-$RequiredMimeTypes = @(
-[PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
-[PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
-[PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
-[PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
-[PSCustomObject]@{ Extension = ".sdi";  MimeType = "application/octet-stream"; Description = "boot.sdi file" },
-[PSCustomObject]@{ Extension = ".bcd";  MimeType = "application/octet-stream"; Description = "boot.bcd boot configuration files" },
-[PSCustomObject]@{ Extension = ".";     MimeType = "application/octet-stream"; Description = "BCD file (with no extension)" },
-[PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
-[PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
-[PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
-[PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
-[PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
-[PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
-[PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
-)
-
-
-
-try {
-    Import-Module WebAdministration -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-}
-catch {
-    write-host "Catch block executed"
-}
-
-if (Get-Module -name WebAdministration) {
-    $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
-    # Loop through required MIME types and check if present in IIS
-    foreach ($mime in $RequiredMimeTypes) {
-        if ($IISMimeTypes.value -contains $mime.Extension) {
-            Write-Host ("✓ IIS MIME type for {0} ({1}) is configured." -f $mime.Extension, $mime.Description) -ForegroundColor Green
-        } else {
-            Write-Host ("✗ IIS MIME type for {0} ({1}) is NOT configured." -f $mime.Extension, $mime.Description) -ForegroundColor Red
-            Write-Host "Remediation: Run following Command" -ForegroundColor Yellow
-            Write-Host ("New-WebMimeType -FileExtension '{0}' -MimeType '{1}' -PSPath 'IIS:\Sites\Default Web Site'" -f $mime.Extension, $mime.MimeType) -ForegroundColor DarkGray
-            $IISMimeTypeUpdateRequired = $true
-        }
+if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
+    Write-Host "=========================================================================" -ForegroundColor DarkGray
+    Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
+    Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, then most of these will be needed." -ForegroundColor Yellow
+    # Table of required MIME types for iPXE and related boot files
+    $RequiredMimeTypes = @(
+    [PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
+    [PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
+    [PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
+    [PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
+    [PSCustomObject]@{ Extension = ".sdi";  MimeType = "application/octet-stream"; Description = "boot.sdi file" },
+    [PSCustomObject]@{ Extension = ".bcd";  MimeType = "application/octet-stream"; Description = "boot.bcd boot configuration files" },
+    [PSCustomObject]@{ Extension = ".";     MimeType = "application/octet-stream"; Description = "BCD file (with no extension)" },
+    [PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
+    [PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
+    [PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
+    [PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
+    [PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
+    [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
+    [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
+    )
+    try {
+        Import-Module WebAdministration -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
     }
-    if ($IISMimeTypeUpdateRequired) {
-        write-host -ForegroundColor Magenta "Run this Script to enable MIME Types"
-        write-Host -ForegroundColor DarkGray "https://github.com/materrill/miketerrill.net/blob/master/Software%20Install%20Scripts/Configure-IISMIMETypes.ps1"
+    catch {
+        write-host "Catch block executed"
+    }
+
+    if (Get-Module -name WebAdministration) {
+        $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
+        # Loop through required MIME types and check if present in IIS
+        foreach ($mime in $RequiredMimeTypes) {
+            if ($IISMimeTypes.value -contains $mime.Extension) {
+                Write-Host ("✓ IIS MIME type for {0} ({1}) is configured." -f $mime.Extension, $mime.Description) -ForegroundColor Green
+            } else {
+                Write-Host ("✗ IIS MIME type for {0} ({1}) is NOT configured." -f $mime.Extension, $mime.Description) -ForegroundColor Red
+                Write-Host "Remediation: Run following Command" -ForegroundColor Yellow
+                Write-Host ("New-WebMimeType -FileExtension '{0}' -MimeType '{1}' -PSPath 'IIS:\Sites\Default Web Site'" -f $mime.Extension, $mime.MimeType) -ForegroundColor DarkGray
+                $IISMimeTypeUpdateRequired = $true
+            }
+        }
+        if ($IISMimeTypeUpdateRequired) {
+            write-host -ForegroundColor Magenta "See this Page for details: https://documentation.2pintsoftware.com/2pxe-server/configuration/iis-and-branchcache-setup-and-config"
+        }
     }
 }
 #Region Services
@@ -1867,6 +1866,8 @@ if ($Installed_2Pint_Software_StifleR_WmiAgent) {
 #prompt user to do installs
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 if ($MissingComponents) {
+    Write-Host "Based on what you're doing, some Windows Features are required, and some are optional" -ForegroundColor Yellow
+    Write-Host "Since I don't know what you plan to do, this script offers you the option of installing them all automatically" -ForegroundColor Yellow
     Write-Host "Would you like to install the missing Windows Features now? (Y/N): " -ForegroundColor Yellow -NoNewline
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
@@ -1874,30 +1875,34 @@ if ($MissingComponents) {
         Write-Host "Add-WindowsFeature $($MissingComponents -join ', ')" -ForegroundColor DarkGray
     }
 }
-if ($IISVirtualDirMissing) {
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Running Remediation for StifleRDashboard virtual directory"
-    if (Test-Path -path "C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files"){
-        Write-Host "✓ StifleRDashboard directory exists." -ForegroundColor Green
-    } else {
-        Write-Host "✗ StifleRDashboard directory is missing." -ForegroundColor Red
-    }
-    Write-Host "Would you like to create the StifleRDashboard virtual directory now? (Y/N): " -ForegroundColor Yellow -NoNewline
-    $response = Read-Host
-    if ($response -eq 'Y' -or $response -eq 'y') {
-        try {
-            New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files' -ErrorAction Stop
-            Write-Host "✓ StifleRDashboard virtual directory created successfully." -ForegroundColor Green
-        } catch {
-            Write-Host "✗ Failed to create virtual directory: $_" -ForegroundColor Red
-            Write-Host "Please run the command manually with elevated permissions." -ForegroundColor Yellow
+if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
+    if ($IISVirtualDirMissing) {
+        Write-Host "=========================================================================" -ForegroundColor DarkGray
+        Write-Host "Running Remediation for StifleRDashboard virtual directory"
+        if (Test-Path -path "C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files"){
+            Write-Host "✓ StifleRDashboard directory exists." -ForegroundColor Green
+        } else {
+            Write-Host "✗ StifleRDashboard directory is missing." -ForegroundColor Red
         }
-    } else {
-        Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
+        Write-Host "Would you like to create the StifleRDashboard virtual directory now? (Y/N): " -ForegroundColor Yellow -NoNewline
+        $response = Read-Host
+        if ($response -eq 'Y' -or $response -eq 'y') {
+            try {
+                New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files' -ErrorAction Stop
+                Write-Host "✓ StifleRDashboard virtual directory created successfully." -ForegroundColor Green
+            } catch {
+                Write-Host "✗ Failed to create virtual directory: $_" -ForegroundColor Red
+                Write-Host "Please run the command manually with elevated permissions." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
+        }
     }
 }
 if ($IISMimeTypeUpdateRequired) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
+    Write-Host "Based on what you're doing, IIS is optional, and some MIME types are optional" -ForegroundColor Yellow
+    Write-Host "Since I don't know what you plan to do, this script offers you the option of enabling them all automatically" -ForegroundColor Yellow
     Write-Host "Would you like to add the missing IIS MIME types now? (Y/N): " -ForegroundColor Yellow -NoNewline
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
