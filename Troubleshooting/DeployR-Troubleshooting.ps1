@@ -745,6 +745,9 @@ function Set-IISMIMETypes {
     @(".bin",  "application/octet-stream"), # wimboot.bin file
     @(".com",  "application/octet-stream"), # BIOS boot loaders
     @(".efi",  "application/octet-stream"), # EFI loader files
+    @(".img",  "application/octet-stream"), # .img file type
+    @(".ipxe", "text/plain"),               # .ipxe file
+    @(".iso",  "application/octet-stream"), # .iso file type
     @(".kpxe", "application/octet-stream"), # For the UNDIonly version of iPXE
     @(".n12",  "application/octet-stream"), # BIOS loaders without F12 key press
     @(".pxe",  "application/octet-stream"), # For the iPXE BIOS loader files
@@ -1104,8 +1107,10 @@ if ($MissingComponents) {
 
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
+Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, the required MIME types must be configured." -ForegroundColor Yellow
 # Table of required MIME types for iPXE and related boot files
 $RequiredMimeTypes = @(
+[PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
 [PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
 [PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
 [PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
@@ -1115,6 +1120,7 @@ $RequiredMimeTypes = @(
 [PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
 [PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
 [PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
+[PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
 [PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
 [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
 [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
