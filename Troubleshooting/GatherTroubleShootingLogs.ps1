@@ -5,9 +5,9 @@ Ideally run the DeployR-Troubleshooting.ps1 script first to pull additional logs
 
 
 Change Log
-    - 2026.2.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
-    - 2026.3.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
-
+- 2026.02.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
+- 2026.03.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
+- 2026.04.03 - Added check for default Content location.
 #>
 
 
@@ -19,54 +19,54 @@ if (!(Test-Path -Path $EventLogsFolder)){New-Item -Path $EventLogsFolder -ItemTy
 Function Find-EventLogs {
     <#
     .SYNOPSIS
-        Finds StifleR-related event logs on the system.
+    Finds StifleR-related event logs on the system.
     
     .DESCRIPTION
-        By default, lists all StifleR event log providers and their associated logs.
-        Optionally exports the logs to a specified directory.
+    By default, lists all StifleR event log providers and their associated logs.
+    Optionally exports the logs to a specified directory.
     
     .PARAMETER Export
-        If specified, exports the found event logs to the OutputDirectory.
+    If specified, exports the found event logs to the OutputDirectory.
     
     .PARAMETER OutputDirectory
-        Directory where event logs will be exported (only used with -Export).
-        Default: $env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs
+    Directory where event logs will be exported (only used with -Export).
+    Default: $env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs
     
     .PARAMETER LogNameFilter
-        Filter for log provider names. Default: *StifleR*
+    Filter for log provider names. Default: *StifleR*
     
     .EXAMPLE
-        Find-EventLogs
-        Lists all StifleR event logs found on the system.
+    Find-EventLogs
+    Lists all StifleR event logs found on the system.
     
     .EXAMPLE
-        Find-EventLogs -Export
-        Finds and exports all StifleR event logs to the default directory.
+    Find-EventLogs -Export
+    Finds and exports all StifleR event logs to the default directory.
     
     .EXAMPLE
-        Find-EventLogs -Export -OutputDirectory "C:\Logs"
-        Finds and exports event logs to C:\Logs.
+    Find-EventLogs -Export -OutputDirectory "C:\Logs"
+    Finds and exports event logs to C:\Logs.
     #>
     [CmdletBinding()]
     param (
-        [Parameter()]
-        [switch]$Export,
-
-        [Parameter()]
-        [switch]$PassThru,
-        
-        [Parameter()]
-        [string]$OutputDirectory = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs",
-        
-        [Parameter()]
-        [string]$LogNameFilter = "*DeployR*"
+    [Parameter()]
+    [switch]$Export,
+    
+    [Parameter()]
+    [switch]$PassThru,
+    
+    [Parameter()]
+    [string]$OutputDirectory = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs",
+    
+    [Parameter()]
+    [string]$LogNameFilter = "*DeployR*"
     )
-
+    
     Write-Host "Searching for event logs matching: $LogNameFilter" -ForegroundColor Cyan
-
+    
     $foundLogs = @()
     $logNamesToExport = @()
-
+    
     # --- Search by Provider Name ---
     $Providers = Get-WinEvent -ListProvider $LogNameFilter -ErrorAction SilentlyContinue
     if ($Providers) {
@@ -90,7 +90,7 @@ Function Find-EventLogs {
             }
         }
     }
-
+    
     # --- Search by Log Name (Channel) ---
     # This catches logs visible in Event Viewer whose provider name doesn't match the filter
     $LogChannels = Get-WinEvent -ListLog $LogNameFilter -ErrorAction SilentlyContinue
@@ -107,7 +107,7 @@ Function Find-EventLogs {
             }
         }
     }
-
+    
     # Display found logs
     if ($foundLogs.Count -gt 0) {
         Write-Host "`nFound $($foundLogs.Count) event log(s):" -ForegroundColor Green
@@ -117,7 +117,7 @@ Function Find-EventLogs {
         Write-Warning "No event logs found matching '$LogNameFilter'"
         return
     }
-
+    
     # Export if requested
     if ($Export) {
         Write-Host "`nExporting event logs..." -ForegroundColor Cyan
@@ -127,14 +127,14 @@ Function Find-EventLogs {
             New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
             Write-Host "Created output directory: $OutputDirectory" -ForegroundColor Gray
         }
-
+        
         $exportCount = 0
-
+        
         # Export each unique log channel as .evtx
         foreach ($logName in $logNamesToExport) {
             $safeLogName = $logName.Replace('/', '_')
             $evtxFilePath = Join-Path -Path $OutputDirectory -ChildPath "$safeLogName.evtx"
-
+            
             try {
                 Start-Process wevtutil.exe -ArgumentList "export-log `"$logName`" `"$evtxFilePath`"" -NoNewWindow -Wait -ErrorAction Stop
                 Write-Host "  Exported: $safeLogName.evtx" -ForegroundColor Gray
@@ -144,7 +144,7 @@ Function Find-EventLogs {
                 Write-Warning "  Failed to export: $logName - $_"
             }
         }
-
+        
         Write-Host "`nExport complete! $exportCount log file(s) exported to: $OutputDirectory" -ForegroundColor Green
     }
     
@@ -157,23 +157,39 @@ Function Find-EventLogs {
 #Get DeployR Log Files
 $DeployRRegPath = "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
 $ContentLocation = (Get-ItemProperty -Path $DeployRRegPath).ContentLocation
-$LogFiles = Get-ChildItem -Path "$ContentLocation" -Filter "*.log" -Recurse
-if ($LogFiles.Count -eq 0){
-    Write-Output "No log files found in $ContentLocation" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Force
+if ($ContentLocation -eq $null -or $ContentLocation -eq ""){
+    $ContentLocation = "$Env:Programdata\2Pint Software\DeployR"
+}
+if (Test-Path -Path $ContentLocation){
+    Write-Host "DeployR Content Location found at: $ContentLocation" -ForegroundColor Green
+    $LogFiles = Get-ChildItem -Path "$ContentLocation" -Filter "*.log" -Recurse
+    if ($LogFiles.Count -eq 0){
+        Write-Output "No log files found in $ContentLocation" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Force
+    }
+    else{
+        foreach ($LogFile in $LogFiles){
+            $LogFiles.FullName | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
+            Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
+        }
+    }
+    
+    
+    #Get Detailed List of all downloads in the $ContentLocation\Download Folder
+    $DownloadFiles = Get-ChildItem -Path "$ContentLocation\Downloads" | Select-Object *
+    #Write to Dedicated Log File with a ---------------- in between each entry:
+    $DownloadFiles | ForEach-Object { $_ | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force; "----------------" | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force }    
+    
+    #Grab the last 10 .zip files from the \Logs Folder
+    $ZipFiles = Get-ChildItem -Path "$ContentLocation\Logs" -Filter "*.zip" | Sort-Object LastWriteTime -Descending | Select-Object -First 10
+    foreach ($ZipFile in $ZipFiles){
+        $ZipFile.FullName | Out-File -FilePath "$TempFolder\DeployR_ZipFiles.txt" -Append -Force
+        Copy-Item -Path $ZipFile.FullName -Destination $TempFolder -Force
+    }   
+
 }
 else{
-    foreach ($LogFile in $LogFiles){
-        $LogFiles.FullName | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
-        Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
-    }
+    Write-Warning "DeployR Content Location not found at expected path: $ContentLocation. No logs will be gathered."
 }
-
-
-#Get Detailed List of all downloads in the $ContentLocation\Download Folder
-$DownloadFiles = Get-ChildItem -Path "$ContentLocation\Downloads" | Select-Object *
-#Write to Dedicated Log File with a ---------------- in between each entry:
-$DownloadFiles | ForEach-Object { $_ | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force; "----------------" | Out-File -FilePath "$TempFolder\DeployR_Download_Files.txt" -Append -Force }    
-
 #Get DeployR (and other 2Pint Software) Configuration
 $2PintRegPath = "HKLM:\SOFTWARE\2Pint Software"
 Get-ChildItem -Path $2PintRegPath -Recurse | Out-File -FilePath "$TempFolder\2Pint_Software_Registry_Settings.txt" -Force
