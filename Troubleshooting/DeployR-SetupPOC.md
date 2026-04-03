@@ -48,6 +48,7 @@ At this point we've confirmed everything is working on a virtual machine, so we'
  - Run OSD on Physical Machine with no additional changes, confirm drivers downloaded and applied
    - Test Success / Fail
  - Upload a driver pack for your device and test with the content item driver pack
+   - Docs: [Driver packs](https://documentation.2pintsoftware.com/deployr/getting-started/creating-a-content-item/driver-packs)
    - Content Items -> Add ->
      - Name : Driver Pack Name ex: Dell Latitude 5590 Win11
      - Description: Downloaded from URL
