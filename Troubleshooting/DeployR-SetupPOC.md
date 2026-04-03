@@ -45,3 +45,26 @@ Using Hyper-V, create a VM for testing, follow this guidance: [Bare Metal with H
 ## Continue Testing on Physical Device
 
 At this point we've confirmed everything is working on a virtual machine, so we'll take what we've build, change nothing and test on a physical.  You can either use iPXE or Flash Drive to boot the physical device to DeployR.  The task sequence template "Windows baremetal from cloud" includes the step "Inject drivers from Cloud", which will automatically detect and download the required drivers.  
+ - Run OSD on Physical Machine with no additional changes, confirm drivers downloaded and applied
+   - Test Success / Fail
+ - Upload a driver pack for your device and test with the content item driver pack
+   - Content Items -> Add ->
+     - Name : Driver Pack Name ex: Dell Latitude 5590 Win11
+     - Description: Downloaded from URL
+     - Purpose: Driver Pack
+     - Type: Folder
+     - Open after Creation & Save
+   - New Version:
+     - Manufacturer: Dell
+     - Model: Latitude 5590 (make sure it matches the actual model name in WMI)
+     - Tags (Optional)
+   - In the Task Sequence, disable the Inject drivers from cloud step, and add "Inject drivers" step
+ - Run OSD on Physical Machine, confirm drivers downloaded from server and applied
+   - Test Success / Fail
+
+
+## Wrap Up
+At this point you have the basics working and tested.  We have a lot of good content to go deeper on our Youtube channel, as well as our docs pages.
+
+- https://documentation.2pintsoftware.com/deployr
+- https://www.youtube.com/@2PintSoftware
