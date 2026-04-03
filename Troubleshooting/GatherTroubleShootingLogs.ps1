@@ -158,10 +158,16 @@ Function Find-EventLogs {
 $DeployRRegPath = "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
 $ContentLocation = (Get-ItemProperty -Path $DeployRRegPath).ContentLocation
 $LogFiles = Get-ChildItem -Path "$ContentLocation" -Filter "*.log" -Recurse
-
-foreach ($LogFile in $LogFiles){
-    Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
+if ($LogFiles.Count -eq 0){
+    Write-Output "No log files found in $ContentLocation" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Force
 }
+else{
+    foreach ($LogFile in $LogFiles){
+        $LogFiles.FullName | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
+        Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
+    }
+}
+
 
 #Get Detailed List of all downloads in the $ContentLocation\Download Folder
 $DownloadFiles = Get-ChildItem -Path "$ContentLocation\Downloads" | Select-Object *
