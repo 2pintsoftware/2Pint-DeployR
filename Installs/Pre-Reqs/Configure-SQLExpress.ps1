@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-    Configures the permissions and firewall rules for Microsoft SQL Server 2022.
+    Configures the permissions and firewall rules for Microsoft SQL Server 2025.
 .DESCRIPTION
     This script grants permissions to NT AUTHORITY/SYSTEM and configures the firewall rules.
 .NOTES
-    Author: Mike Terrill/2Pint Software
+    Author: Mike Terrill/2Pint Software & Edits by Gary Blok
     Date: August 4, 2025
-    Version: 25.08.04
+    Version: 26.04.08
+    UPDATED for Server 2025 and SQL Server 2025 Express Edition (Will not work properly with 2022 as path and syntax have changed)
     Requires: Administrative privileges, 64-bit Windows, internet access
 #>
 
