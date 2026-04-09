@@ -498,7 +498,7 @@ if (!$MSIFiles) {
     }
 }
 
-$MSIFiles = Get-ChildItem -Path $ContentLocation -Filter *.msi
+$MSIFiles = Get-ChildItem -Path $sourceFolder -Filter *.msi
 $Dashboard = $MSIFiles | Where-Object { $_.Name -like "*Dashboard*.msi" } | Select-Object -First 1
 $StiflerRServer = $MSIFiles | Where-Object { $_.Name -like "*Server*.msi" } | Select-Object -First 1 
 $WMIAgent = $MSIFiles | Where-Object { $_.Name -like "*WMI*.msi" } | Select-Object -First 1  
@@ -511,7 +511,7 @@ write-host "StifleR Server installation completed with exit code: $($ServerInsta
 #Install WMI Agent
 $WMIAgentInstall = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$($WMIAgent.FullName)`" /qb! /l*v C:\Windows\Temp\WMIAgentInstall.log" -Wait -NoNewWindow -PassThru
 write-host "WMIAgent installation completed with exit code: $($WMIAgentInstall.ExitCode)"
-New-Item -Path "HKLM:\SOFTWARE\2Pint Software\StifleR\WmiAgent" -Force | Out-Null
+New-Item -Path "HKLM:\SOFTWARE\2Pint Software\StifleR\WmiAgent\GeneralSettings" -Force | Out-Null
 New-ItemProperty -Path "HKLM:\SOFTWARE\2Pint Software\StifleR\WmiAgent\GeneralSettings" -Name "ServerUrls" -Value "https://$($fqdn):9000" -PropertyType String -Force | Out-Null
 Set-Service -Name StifleRWmiAgent -StartupType Automatic
 Start-Service -Name StifleRWmiAgent
