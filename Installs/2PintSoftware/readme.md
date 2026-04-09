@@ -19,7 +19,7 @@ Once you've done your pre-reqs... come here...
 If you've done, that, run the Extract-2PintZips.ps1 which will expand all of those zip files into a subfolder called "Extracted" which is where rest of the scripts will look to find the installer files.
 
 > [!NOTE]
-> All of the MSI files should be located here: "$env:USERPROFILE\Downloads\DeployRSuite\Extracted"  If you extract them manually, that's fine, just get extract them to that path, then continue with the install scripts.
+> Before install,. all of the MSI files that you extracted should be located here: "$env:USERPROFILE\Downloads\DeployRSuite\Extracted"  If you extract them manually, that's fine, just get extract them to that path, then continue with the install scripts.
 
 Order of Install:
 - 2PXE
