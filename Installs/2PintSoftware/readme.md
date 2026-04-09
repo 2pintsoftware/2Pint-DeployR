@@ -64,3 +64,5 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/PopulateDeployRExtras.ps1)
 ```
+
+If you have any issues with the scripts, please reach out to support.
