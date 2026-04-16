@@ -16,6 +16,7 @@ USE POWERSHELL 7 or PowerShell ISE.  This doesn't work properly from PowerShell 
 - Check for SQL String Connection based on DeployR Registry
 - Check for SQL Permissions of NT AUTHORITY\SYSTEM for sysadmin and dbcreator roles
 - Check for SQL Permissions of NT AUTHORITY\SYSTEM for db_owner on all databases
+- Check for SQL String Connection based on iPXE WS Registry
 
 
 
@@ -39,6 +40,7 @@ Change Log
 - 2026.02.24 - Added iPXE & 2PXE Apps to list, noted as OPTIONAL
 - 2026.02.24 - Added check for matching certificate thumbprints between iPXE WS and 2PXE if both are installed
 - 2026.04.01 - Added Notes around IIS & MIME Type, reminders that it's optional
+- 2026.04.16 - Added check for SQL String Connection based on iPXE WS Registry
 
 
 To DO
@@ -1663,6 +1665,17 @@ if ($certHash) {
 }
 
 if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
+    $iPXEWSRegPath = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'
+    if (Test-Path -Path $iPXEWSRegPath) {
+        $iPXEWSRegData = Get-ItemProperty -Path $iPXEWSRegPath
+        if ($iPXEWSRegData.ConnectionString) {
+            Write-Host "iPXE WS SQL Connection String from Registry: $($iPXEWSRegData.ConnectionString)" -ForegroundColor Cyan
+            Test-SQLConnection -ConnectionString $iPXEWSRegData.ConnectionString
+        }
+        else {
+            Write-Host "iPXE WS SQL Connection String is NOT configured in Registry." -ForegroundColor Red
+        }
+    }
     $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     if ($iPXEcertHash) {
         Write-Host  "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
@@ -1730,6 +1743,7 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
     }
 }
 if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true)){
+    
     if ($2PXEcertHash -eq $iPXEcertHash) {
         Write-Host "The certificate hash matches (2PXE & iPXE WS)." -ForegroundColor Green
     }
