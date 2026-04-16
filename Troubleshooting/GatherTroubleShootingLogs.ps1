@@ -210,6 +210,19 @@ Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*2PXE*"
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*iPXE*"
 
+#Get iPXE DebugLog if exist
+$iPXEWSRegPath = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'
+if (Test-Path -Path $iPXEWSRegPath) {
+    $iPXEWSRegData = Get-ItemProperty -Path $iPXEWSRegPath
+    if ($iPXEWSRegData.DebugLogPath) {
+        #Write-Host "iPXE WS Debug Log Path from Registry: $($iPXEWSRegData.DebugLogPath)" -ForegroundColor Cyan
+        Copy-Item -Path $iPXEWSRegData.DebugLogPath -Destination $TempFolder -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        #Write-Host "iPXE WS Debug Log Path is NOT configured in Registry." -ForegroundColor Red
+    }
+}
+
 #Get StifleR Event Logs (in case there are some that don't have DeployR in the name)
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*StifleR*"
 Write-Host "Event log export complete!" -ForegroundColor Green
