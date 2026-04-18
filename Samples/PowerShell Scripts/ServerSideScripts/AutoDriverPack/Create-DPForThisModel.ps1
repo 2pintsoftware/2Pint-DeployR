@@ -116,15 +116,23 @@ Write-Information "OSIMAGE            : $OSIMAGE"
 Write-Information "OSIMAGERELEASE     : $OSIMAGERELEASE"
 Write-Information "OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
 #>
-Write-Information "Make: $MakeAlias, Model: $ModelAlias, System: $SystemAlias, OS: $OSIMAGE, Release: $OSIMAGERELEASE, Architecture: $OSIMAGEARCHITECTURE" -ForegroundColor Cyan
+Write-Information "Make: $MakeAlias, Model: $ModelAlias, System: $SystemAlias, OS: $OSIMAGE, Release: $OSIMAGERELEASE, Architecture: $OSIMAGEARCHITECTURE"
 
 
 # ←←← PUT YOUR ACTUAL DRIVER PACK CREATION CODE HERE ↓↓↓
 # Example placeholder:
 # Write-Information "Creating Driver Pack for $MakeAlias - $ModelAlias ($OSIMAGE)..."
 # ... your logic ...
-Connect-ToDeployR
-
+#Connect-ToDeployR
+$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
+if (Test-Path $DeployRModulePath) {
+    Import-Module $DeployRModulePath -ErrorAction Stop
+}
+if (Test-Path "HKLM:\software\2Pint Software\DeployR\GeneralSettings") {
+    $DeployRReg = Get-Item -Path "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
+    $ClientPasscode = $DeployRReg.GetValue("ClientPasscode")
+    Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
+}
 
 <#
 Ok, this isn't gonna be as simple as I thought, because the Get-DeployROEMDriverPack lets you feed it the Make & Model, however..
