@@ -120,7 +120,7 @@ Write-Information "OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
 # Example placeholder:
 # Write-Information "Creating Driver Pack for $MakeAlias - $ModelAlias ($OSIMAGE)..."
 # ... your logic ...
-#Connect-ToDeployR
+Connect-ToDeployR
 
 
 <#
