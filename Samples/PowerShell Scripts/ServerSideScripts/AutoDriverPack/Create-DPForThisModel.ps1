@@ -96,6 +96,7 @@ for ($i = 0; $i -lt $ExtraArgs.Count; $i += 2) {
 # Now pull the values you actually need
 $MakeAlias             = $TSVars['MakeAlias']
 $ModelAlias            = $TSVars['ModelAlias']
+$SystemAlias           = $TSVars['SystemAlias']
 $OSIMAGE               = $TSVars['OSIMAGE']
 $OSIMAGERELEASE        = $TSVars['OSIMAGERELEASE']
 $OSIMAGEARCHITECTURE   = $TSVars['OSIMAGEARCHITECTURE']
@@ -106,7 +107,7 @@ $Model                 = $TSVars['MODEL']
 # Logging (visible in DeployR Logger)
 Write-Information "MakeAlias          : $MakeAlias"
 Write-Information "ModelAlias         : $ModelAlias"
-Write-Information "MODEL (TS var)     : $Model"
+Write-Information "SystemAlias        : $SystemAlias"
 Write-Information "OSIMAGE            : $OSIMAGE"
 Write-Information "OSIMAGERELEASE     : $OSIMAGERELEASE"
 Write-Information "OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
@@ -133,4 +134,55 @@ Then compare the ModelAlias to the list of Models to find the correct match, the
 I have a lot of matching to do now to figure out if this idea is viable.
 #>
 
+$SupportedModels = Get-DeployROEMDriverPack -Make $MakeAlias
+$MatchedModel = $SupportedModels | Where-Object { $_ -match $ModelAlias }
+if ($MatchedModel.Count -eq 0) {
+    Write-Warning "No exact match found for ModelAlias '$ModelAlias'. Attempting to match with SystemAlias variable..."
+    $MatchedModel = $SupportedModels | Where-Object { $_ -match $SystemAlias }
+    if ($MatchedModel.Count -eq 0) {
+        Write-Error "No match found for either ModelAlias '$ModelAlias' or SystemAlias '$SystemAlias'. Cannot create Driver Pack."
+    }
+    else {
+        Write-Information "Match found using SystemAlias: $($MatchedModel -join ', ')"
+        # Proceed with creating Driver Pack using $MatchedModel
+    }
+}
+
+else {
+    $DriverPacks = $SupportedModels = Get-DeployROEMDriverPack -Make $MakeAlias -Model $MatchedModel
+    if ($DriverPacks.Count -eq 0) {
+        Write-Error "No Driver Packs found for Make '$MakeAlias' and Model '$MatchedModel'."
+    }
+    else {
+        foreach ($Pack in $DriverPacks) {
+            Write-Information "Found Driver Pack $($Pack.name)"
+            # Here you would call the function to create the Driver Pack, e.g.:
+            # New-DeployROEMDriverPack -Make $MakeAlias -Model $MatchedModel -OS $OSIMAGE
+        }
+    }
+    if ($DriverPacks.Count -ge 1) {
+        $SpecificDriverPack = $DriverPacks | Where-Object { $_.OS -match $OSIMAGE -and $_.OSReleaseID -match $OSIMAGERELEASE}
+        if ($SpecificDriverPack.Count -eq 0) {
+            Write-Warning "No exact match found for OS '$OSIMAGE' and Release '$OSIMAGERELEASE'. Attempting to match with just OS '$OSIMAGE'..."
+            $SpecificDriverPack = $DriverPacks | Where-Object { $_.OS -match $OSIMAGE }
+            if ($SpecificDriverPack.Count -eq 0) {
+                Write-Warning "No match found for OS '$OSIMAGE'"
+                $SpecificDriverPack = $DriverPacks | Select-Object -Last 1
+            }
+            else {
+                Write-Information "Match found using OS Architecture: $($SpecificDriverPack -join ', ')"
+                $SpecificDriverPack = $SpecificDriverPack | Select-Object -Last 1
+                # Proceed with creating Driver Pack using $SpecificDriverPack
+            }
+        }
+        else {
+            Write-Information "Exact match found for OS and Release: $($SpecificDriverPack -join ', ')"
+            $SpecificDriverPack = $SpecificDriverPack | Select-Object -Last 1
+        }
+    }
+}
+if ($SpecificDriverPack) {
+    Write-Information "Creating Driver Pack for $MakeAlias - $MatchedModel with OS $($SpecificDriverPack.OS) Release $($SpecificDriverPack.OSReleaseID)..."
+    $SpecificDriverPack | Import-DeployROEMDriverPack
+}
 Write-Information "Script completed successfully."
