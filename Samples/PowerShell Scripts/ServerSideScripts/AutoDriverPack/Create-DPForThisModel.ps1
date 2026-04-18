@@ -101,9 +101,6 @@ $OSIMAGE               = $TSVars['OSIMAGE']
 $OSIMAGERELEASE        = $TSVars['OSIMAGERELEASE']
 $OSIMAGEARCHITECTURE   = $TSVars['OSIMAGEARCHITECTURE']
 
-# Optional: also grab MODEL if you need it
-$Model                 = $TSVars['MODEL']
-
 # Logging (visible in DeployR Logger)
 Write-Information "MakeAlias          : $MakeAlias"
 Write-Information "ModelAlias         : $ModelAlias"
