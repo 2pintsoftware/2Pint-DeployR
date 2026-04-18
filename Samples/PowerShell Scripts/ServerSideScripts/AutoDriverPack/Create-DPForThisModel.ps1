@@ -33,25 +33,32 @@ function Connect-ToDeployR {
     )
 
     
-        # Check if module is available
-        if (Test-Path $DeployRModulePath) {
-            Import-Module $DeployRModulePath -ErrorAction Stop
-        }
-        elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
-            Import-Module DeployR.Utility -ErrorAction Stop
-        }
-        else {
-            throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
-        }
+    # Check if module is available
+    if (Test-Path $DeployRModulePath) {
+        Import-Module $DeployRModulePath -ErrorAction Stop
+    }
+    elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
+        Import-Module DeployR.Utility -ErrorAction Stop
+    }
+    else {
+        throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
+    }
+    if (get-command -Module DeployR.Utility -Name "Get-DeployROemDriverPack" -ErrorAction SilentlyContinue) {
+        Write-Information "DeployR.Utility module loaded successfully." -ForegroundColor Green
+    }
+    else {
+        throw "Get-DeployROemDriverPack command not found in DeployR.Utility module."
+    }
     
     try {
-        Connect-DeployR
+        Connect-DeployR -erroraction stop
+        Write-Information "Successfull connection to DeployR" -ForegroundColor Green
     }
     catch{
-        Write-Host "Initial connection to DeployR failed, attempting to retrieve passcode..." -ForegroundColor Yellow
+        Write-Warning "Initial connection to DeployR failed, attempting to retrieve passcode..." -ForegroundColor Yellow
     }    
     try {    
-        Write-Host "Connecting to DeployR..." -ForegroundColor Cyan
+        #Write-Information "Connecting to DeployR..." -ForegroundColor Cyan
         Import-Module $DeployRModulePath
         #Set-DeployRHost "http://localhost:7282"
         
@@ -72,7 +79,7 @@ function Connect-ToDeployR {
             Connect-DeployR
         }
         
-        Write-Host "Connected to DeployR" -ForegroundColor Green
+        Write-Information "Connected to DeployR" -ForegroundColor Green
         return $true
     }
     catch {
