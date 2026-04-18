@@ -108,13 +108,16 @@ $OSIMAGE               = $TSVars['OSIMAGE']
 $OSIMAGERELEASE        = $TSVars['OSIMAGERELEASE']
 $OSIMAGEARCHITECTURE   = $TSVars['OSIMAGEARCHITECTURE']
 
-# Logging (visible in DeployR Logger)
+<# Logging (visible in DeployR Logger)
 Write-Information "MakeAlias          : $MakeAlias"
 Write-Information "ModelAlias         : $ModelAlias"
 Write-Information "SystemAlias        : $SystemAlias"
 Write-Information "OSIMAGE            : $OSIMAGE"
 Write-Information "OSIMAGERELEASE     : $OSIMAGERELEASE"
 Write-Information "OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
+#>
+Write-Information "Make: $MakeAlias, Model: $ModelAlias, System: $SystemAlias, OS: $OSIMAGE, Release: $OSIMAGERELEASE, Architecture: $OSIMAGEARCHITECTURE" -ForegroundColor Cyan
+
 
 # ←←← PUT YOUR ACTUAL DRIVER PACK CREATION CODE HERE ↓↓↓
 # Example placeholder:
