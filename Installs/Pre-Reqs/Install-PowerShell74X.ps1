@@ -62,3 +62,6 @@ function Install-PowerShell74X {
 
     Install-Windows -Version $version
 }
+
+#Run the Function
+Install-PowerShell74X
