@@ -5,6 +5,11 @@
 function Install-PowerShell74X {
     [CmdletBinding()]
     param()
+
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        throw "This script must be called from Windows PowerShell 5.x (PS5), not PowerShell 7+."
+    }
+
     function Get-LatestRelease {
         $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/PowerShell/PowerShell/releases"
         $latest = $releases | Where-Object { $_.tag_name -match '^v7\.4\.\d+$' } | Select-Object -First 1
