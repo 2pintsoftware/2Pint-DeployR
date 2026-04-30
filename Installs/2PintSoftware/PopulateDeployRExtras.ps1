@@ -35,6 +35,12 @@ else {
     $driveLetter = 'C:'
 }
 $RootPath = "$driveLetter\DeployRSources"
+write-host "RootPath is set to $RootPath"
+# Ensure the script runs with elevated privileges
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "This script requires administrative privileges. Please run PowerShell as Administrator."
+    exit 1
+}
 
 if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
     Write-Host "DeployR.Utility module found."

@@ -12,14 +12,14 @@ This is available in Version 1.1+
 
 <#
 .SYNOPSIS
-    Server-side script to create a Driver Pack for the current model.
-    Properly handles DeployR's argument passing.
+Server-side script to create a Driver Pack for the current model.
+Properly handles DeployR's argument passing.
 #>
 
 # Capture ALL arguments DeployR sends (this is the recommended pattern)
 param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$ExtraArgs
+[Parameter(ValueFromRemainingArguments = $true)]
+[string[]]$ExtraArgs
 )
 
 
@@ -28,37 +28,37 @@ param(
 function Connect-ToDeployR {
     [cmdletbinding()]
     param(
-        [string]$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility',
-        [string]$PasscodeString = $null
+    [string]$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility',
+    [string]$PasscodeString = $null
     )
-
+    
     
     # Check if module is available
-    if (Test-Path $DeployRModulePath) {
-        Import-Module $DeployRModulePath -ErrorAction Stop
-    }
-    elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
-        Import-Module DeployR.Utility -ErrorAction Stop
-    }
-    else {
-        throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
-    }
     if (get-command -Module DeployR.Utility -Name "Get-DeployROemDriverPack" -ErrorAction SilentlyContinue) {
-        Write-Information "DeployR.Utility module loaded successfully." -ForegroundColor Green
+        Write-Information "Line # 38 | DeployR.Utility module loaded successfully."
     }
     else {
-        throw "Get-DeployROemDriverPack command not found in DeployR.Utility module."
+        if (Test-Path $DeployRModulePath) {
+            Import-Module $DeployRModulePath -ErrorAction Stop
+        }
+        elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
+            Import-Module DeployR.Utility -ErrorAction Stop
+        }
+        else {
+            throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
+        }
     }
+    
     
     try {
         Connect-DeployR -erroraction stop
-        Write-Information "Successfull connection to DeployR" -ForegroundColor Green
+        Write-Information "Line # 55 | Successfull connection to DeployR" 
     }
     catch{
-        Write-Warning "Initial connection to DeployR failed, attempting to retrieve passcode..." -ForegroundColor Yellow
+        Write-Warning "Line # 58 | Initial connection to DeployR failed, attempting to retrieve passcode..."
     }    
     try {    
-        #Write-Information "Connecting to DeployR..." -ForegroundColor Cyan
+        #Write-Information "Connecting to DeployR..."
         Import-Module $DeployRModulePath
         #Set-DeployRHost "http://localhost:7282"
         
@@ -79,11 +79,11 @@ function Connect-ToDeployR {
             Connect-DeployR
         }
         
-        Write-Information "Connected to DeployR" -ForegroundColor Green
+        Write-Information "Line # 82 | Connected to DeployR"
         return $true
     }
     catch {
-        Write-Error "Failed to connect to DeployR: $_"
+        Write-Error "Line # 86 | Failed to connect to DeployR: $_"
         return $false
     }
 }
@@ -109,30 +109,22 @@ $OSIMAGERELEASE        = $TSVars['OSIMAGERELEASE']
 $OSIMAGEARCHITECTURE   = $TSVars['OSIMAGEARCHITECTURE']
 
 <# Logging (visible in DeployR Logger)
-Write-Information "MakeAlias          : $MakeAlias"
-Write-Information "ModelAlias         : $ModelAlias"
-Write-Information "SystemAlias        : $SystemAlias"
-Write-Information "OSIMAGE            : $OSIMAGE"
-Write-Information "OSIMAGERELEASE     : $OSIMAGERELEASE"
-Write-Information "OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
+Write-Information "Line # 112 | MakeAlias          : $MakeAlias"
+Write-Information "Line # 113 | ModelAlias         : $ModelAlias"
+Write-Information "Line # 114 | SystemAlias        : $SystemAlias"
+Write-Information "Line # 115 | OSIMAGE            : $OSIMAGE"
+Write-Information "Line # 116 | OSIMAGERELEASE     : $OSIMAGERELEASE"
+Write-Information "Line # 117 | OSIMAGEARCHITECTURE: $OSIMAGEARCHITECTURE"
 #>
-Write-Information "Make: $MakeAlias, Model: $ModelAlias, System: $SystemAlias, OS: $OSIMAGE, Release: $OSIMAGERELEASE, Architecture: $OSIMAGEARCHITECTURE"
+Write-Information "Line # 119 | Make: $MakeAlias, Model: $ModelAlias, System: $SystemAlias, OS: $OSIMAGE, Release: $OSIMAGERELEASE, Architecture: $OSIMAGEARCHITECTURE"
 
 
 # ←←← PUT YOUR ACTUAL DRIVER PACK CREATION CODE HERE ↓↓↓
 # Example placeholder:
 # Write-Information "Creating Driver Pack for $MakeAlias - $ModelAlias ($OSIMAGE)..."
 # ... your logic ...
-#Connect-ToDeployR
-$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
-if (Test-Path $DeployRModulePath) {
-    Import-Module $DeployRModulePath -ErrorAction Stop
-}
-if (Test-Path "HKLM:\software\2Pint Software\DeployR\GeneralSettings") {
-    $DeployRReg = Get-Item -Path "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
-    $ClientPasscode = $DeployRReg.GetValue("ClientPasscode")
-    Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
-}
+Connect-ToDeployR
+
 
 <#
 Ok, this isn't gonna be as simple as I thought, because the Get-DeployROEMDriverPack lets you feed it the Make & Model, however..
@@ -141,63 +133,73 @@ I think for Lenovo as example, we'll had to do something like:
 $Models = Get-DeployROEMDriverPack -Make "Lenovo"
 $Specific = $Models | where-object { $_ -match $ModelAlias }
 if ($Specific.count -lt 1){
-    #Try SystemAlias
-    $Specific = $Models | where-object { $_ -match $SystemAlias }
+#Try SystemAlias
+$Specific = $Models | where-object { $_ -match $SystemAlias }
 }
 
 Then compare the ModelAlias to the list of Models to find the correct match, then feed that back into the Get-DeployROEMDriverPack function to get the correct Driver Pack created.
 I have a lot of matching to do now to figure out if this idea is viable.
 #>
 
-$SupportedModels = Get-DeployROEMDriverPack -Make $MakeAlias
+if ($ModelAlias -match "Virtual Machine" -and $MakeAlias -match "Microsoft") {
+    Write-Information "Line # 145 | Detected Hyper-V VM. Skipping Driver Pack creation."
+    #For Testing, we're going to change this to a VMWare VM
+    $MakeAlias = "HP"
+    $ModelAlias = "HP ZBook Studio 16 inch G10 Mobile Workstation PC"
+    $SystemAlias = "8B8F"
+    Write-Information "Line # 150 | Changed MakeAlias to '$MakeAlias' and ModelAlias to '$ModelAlias' for testing purposes."
+}
+
+$SupportedModels = Get-DeployROEMDriverPack -Manufacturer $MakeAlias
 $MatchedModel = $SupportedModels | Where-Object { $_ -match $ModelAlias }
 if ($MatchedModel.Count -eq 0) {
-    Write-Warning "No exact match found for ModelAlias '$ModelAlias'. Attempting to match with SystemAlias variable..."
+    Write-Warning "Line # 156 | No exact match found for ModelAlias '$ModelAlias'. Attempting to match with SystemAlias variable..."
     $MatchedModel = $SupportedModels | Where-Object { $_ -match $SystemAlias }
     if ($MatchedModel.Count -eq 0) {
-        Write-Error "No match found for either ModelAlias '$ModelAlias' or SystemAlias '$SystemAlias'. Cannot create Driver Pack."
+        Write-Error "Line # 159 | No match found for either ModelAlias '$ModelAlias' or SystemAlias '$SystemAlias'. Cannot create Driver Pack."
     }
     else {
-        Write-Information "Match found using SystemAlias: $($MatchedModel -join ', ')"
+        Write-Information "Line # 162 | Match found using SystemAlias: $($MatchedModel -join ', ')"
         # Proceed with creating Driver Pack using $MatchedModel
     }
 }
 
 else {
-    $DriverPacks = $SupportedModels = Get-DeployROEMDriverPack -Make $MakeAlias -Model $MatchedModel
+    $MatchedModel = ($MatchedModel | Select-Object -Last 1).Name
+    $DriverPacks = Get-DeployROEMDriverPack -Manufacturer $MakeAlias -Model $MatchedModel
     if ($DriverPacks.Count -eq 0) {
-        Write-Error "No Driver Packs found for Make '$MakeAlias' and Model '$MatchedModel'."
+        Write-Error "Line # 170 | No Driver Packs found for Make '$MakeAlias' and Model '$MatchedModel'."
     }
     else {
         foreach ($Pack in $DriverPacks) {
-            Write-Information "Found Driver Pack $($Pack.name)"
+            Write-Information "Line # 174 | Found Driver Pack $($Pack.name)"
             # Here you would call the function to create the Driver Pack, e.g.:
-            # New-DeployROEMDriverPack -Make $MakeAlias -Model $MatchedModel -OS $OSIMAGE
+            # New-DeployROEMDriverPack -Manufacturer $MakeAlias -Model $MatchedModel -OS $OSIMAGE
         }
     }
     if ($DriverPacks.Count -ge 1) {
         $SpecificDriverPack = $DriverPacks | Where-Object { $_.OS -match $OSIMAGE -and $_.OSReleaseID -match $OSIMAGERELEASE}
         if ($SpecificDriverPack.Count -eq 0) {
-            Write-Warning "No exact match found for OS '$OSIMAGE' and Release '$OSIMAGERELEASE'. Attempting to match with just OS '$OSIMAGE'..."
+            Write-Warning "Line # 182 | No exact match found for OS '$OSIMAGE' and Release '$OSIMAGERELEASE'. Attempting to match with just OS '$OSIMAGE'..."
             $SpecificDriverPack = $DriverPacks | Where-Object { $_.OS -match $OSIMAGE }
             if ($SpecificDriverPack.Count -eq 0) {
-                Write-Warning "No match found for OS '$OSIMAGE'"
+                Write-Warning "Line # 185 | No match found for OS '$OSIMAGE'"
                 $SpecificDriverPack = $DriverPacks | Select-Object -Last 1
             }
             else {
-                Write-Information "Match found using OS Architecture: $($SpecificDriverPack -join ', ')"
+                Write-Information "Line # 189 | Match found using OS Architecture: $($SpecificDriverPack -join ', ')"
                 $SpecificDriverPack = $SpecificDriverPack | Select-Object -Last 1
                 # Proceed with creating Driver Pack using $SpecificDriverPack
             }
         }
         else {
-            Write-Information "Exact match found for OS and Release: $($SpecificDriverPack -join ', ')"
+            Write-Information "Line # 195 | Exact match found for OS and Release: $($SpecificDriverPack -join ', ')"
             $SpecificDriverPack = $SpecificDriverPack | Select-Object -Last 1
         }
     }
 }
 if ($SpecificDriverPack) {
-    Write-Information "Creating Driver Pack for $MakeAlias - $MatchedModel with OS $($SpecificDriverPack.OS) Release $($SpecificDriverPack.OSReleaseID)..."
+    Write-Information "Line # 201 | Creating Driver Pack for $MakeAlias - $MatchedModel with OS $($SpecificDriverPack.OS) Release $($SpecificDriverPack.OSReleaseID)..."
     $SpecificDriverPack | Import-DeployROEMDriverPack
 }
-Write-Information "Script completed successfully."
+Write-Information "Line # 204 | Script completed successfully."
