@@ -147,7 +147,7 @@ else {
 #Simple Example
 $Windows11SourceFolder = 'D:\DeployRSources\OSPackages\ClientOS\26100.8246'
 $Windows11OSCI = New-DeployRContentItem -Type Folder -Name '01 DEMO - Windows 11 24H2 x64' -Description 'Windows 11 OS package source' -Purpose OperatingSystem
-$Windows11OSVersion = New-DeployRContentItemVersion -ContentItemId $Windows11OSCI.id -SourceFolder $ExportFolder -Description 'Initial Windows 11 24H2 OS image'
+$Windows11OSVersion = New-DeployRContentItemVersion -ContentItemId $Windows11OSCI.id -SourceFolder "$Windows11SourceFolder\install.wim" -Description 'Initial Windows 11 24H2 OS image'
 
 
 
