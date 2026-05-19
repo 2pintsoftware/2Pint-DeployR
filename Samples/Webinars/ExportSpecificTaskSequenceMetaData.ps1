@@ -47,9 +47,9 @@ if (-not (Test-Path -Path $TempLocation)) {
 
 #Clone a DeployR Task Sequnce 
 $TSID = '102d275b-fee3-477b-aa07-a8f63ca2140c'
-$TSMetaData = Get-DeployRTaskSequence -Id $TSID
 
 #Export the task sequence to a temporary location, then import it back as a clone. 
 Export-DeployRTaskSequence -Id $TSID -DestinationFolder $TempLocation
 #The exported file is filtered by the original TS ID to ensure we get the correct one if there are multiple exports in the temp folder.
 $ExportedTSFile = Get-ChildItem -Path $TempLocation -Filter '*.json' | Where-Object {$_.Name -match $TSID}
+Write-Host "Exported Task Sequence file located at: $($ExportedTSFile.FullName)"
