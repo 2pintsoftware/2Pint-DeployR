@@ -5,7 +5,7 @@ You can open the script and paste them into your environment, or run the powersh
 
 
 > [!NOTE]
-> These are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
+> These Pre-Req scripts are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
 
 ## Order
 
@@ -73,6 +73,9 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ## 2Pint Software Installs
 
 This software is available to 2Pint Software DeployR Customers, if you don't have access to the downloads, reach out to your sales representative, or send an email to <support@2pintsoftware.com>.
+
+> [!NOTE]
+> These Software Installer scripts are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
 
 For a DeployR Server, this would be the install order of 2Pint Software components:
 
