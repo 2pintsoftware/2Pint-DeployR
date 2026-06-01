@@ -46,7 +46,7 @@ function Install-PowerShell74X {
         Download-File -Url $url -OutputPath $tempFile
 
         Write-Host "Installing PowerShell..."
-        $Install = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $tempFile /quiet /norestart" -Wait -NoNewWindow
+        $Install = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $tempFile /quiet /norestart" -Wait -NoNewWindow -Passthru
 
         if ($Install.ExitCode -ne 0) {
             Write-Host "Installation failed with exit code $($Install.ExitCode)."
