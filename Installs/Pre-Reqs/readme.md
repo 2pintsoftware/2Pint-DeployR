@@ -3,6 +3,9 @@
 This folder will contain scripts to automate the installation of Pre-reqs
 You can open the script and paste them into your environment, or run the powershell command listed under the script directly in Elevated PowerShell console: iex (irm URL to script)
 
+Note these are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
+
+
 ## Order
 
 - Install-PowerShell74X.ps1
