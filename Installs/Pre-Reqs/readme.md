@@ -15,10 +15,15 @@ You can open the script and paste them into your environment, or run the powersh
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
 ```
 
-- Install-DotNetRuntimes80X.ps1
+- Install-DotNetRuntimes80X.ps1 (DeployR 1.0 / 1.1)
 
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes80X.ps1)
+```
+- Install-DotNetRuntimes100X.ps1 (DeployR 1.2)
+
+```
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes100X.ps1)
 ```
 
 - Install-WinFeatures.ps1
