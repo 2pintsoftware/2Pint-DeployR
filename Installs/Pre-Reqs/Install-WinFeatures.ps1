@@ -1,3 +1,6 @@
+# This installs BranchCache & IIS on the Server.  FYI, IIS is NOT required for DeployR or the StifleR Dashboard, it's handy for hosting extra files, but completely optional.
+# When it is useful?  If you have iPXE WS, it's really nice for example.
+
 $ErrorActionPreference = 'Stop'
 
 try {
