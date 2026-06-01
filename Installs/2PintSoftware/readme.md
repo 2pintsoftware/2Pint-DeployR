@@ -6,6 +6,10 @@ It will leverage using 2PintSoftware self signed certs, which is great for a POC
 
 Once you've done your pre-reqs... come here...
 
+> [!NOTE]
+> These Software Installer scripts are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, you'll want to follow the 2Pint Videos instead.
+
+
 ## Assumptions
 
 - You downloaded the DeployR Suite files to your Downloads folder in a subfolder called "DeployRSuite"
