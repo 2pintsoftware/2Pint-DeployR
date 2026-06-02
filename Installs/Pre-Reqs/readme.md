@@ -7,6 +7,8 @@ You can open the script and paste them into your environment, or run the powersh
 > [!NOTE]
 > These Pre-Req scripts are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
 
+These have been last tested on June 1st, 2026, on a cleanly installed Windows 2025 Server Standard.
+
 ## Order
 
 - Install-PowerShell74X.ps1
