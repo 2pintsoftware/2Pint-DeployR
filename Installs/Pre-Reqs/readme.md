@@ -3,7 +3,6 @@
 This folder will contain scripts to automate the installation of Pre-reqs
 You can open the script and paste them into your environment, or run the powershell command listed under the script directly in Elevated PowerShell console: iex (irm URL to script)
 
-
 > [!NOTE]
 > These Pre-Req scripts are meant for a POC, and will make several assumptions for you.  If you want to setup DeployR in Production, essepcially the SQL stuff, you'll want to follow the 2Pint Videos instead.
 
@@ -13,67 +12,68 @@ These have been last tested on June 1st, 2026, on a cleanly installed Windows 20
 
 - Install-PowerShell74X.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
 ```
 
 - Install-DotNetRuntimes80X.ps1 (DeployR 1.0 / 1.1)
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes80X.ps1)
 ```
+
 - Install-DotNetRuntimes100X.ps1 (DeployR 1.2)
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes100X.ps1)
 ```
 
 - Install-WinFeatures.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures.ps1)
 ```
 
 - Install-SQLExpress2025.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQLExpress2025.ps1)
 ```
 
 - Install-SQL2025CU.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQL2025CU.ps1)
 ```
 
 - Reboot
 - Install-WindowsADK.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WindowsADK.ps1)
 ```
 
 - Install-WindowsADKWinPE.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WindowsADKWinPE.ps1)
 ```
 
 - Install-VCRedist-x64.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-VCRedist-x64.ps1)
 ```
 
 - Configure-SQLExpress.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Configure-SQLExpress.ps1)
 ```
 
 - Install-SSMS22.ps1
 
-```
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SMSS22.ps1)
 ```
   
