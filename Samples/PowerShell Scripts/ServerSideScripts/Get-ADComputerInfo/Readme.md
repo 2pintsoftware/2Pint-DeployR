@@ -33,15 +33,15 @@ You can then use this information to help automate other processes.
 Using this data to grab the OU to feed into the Offline Domain Join step:
 
 First run the script that pulls back the information
-![GetInfo01](media\GetInfo01.png)
+![GetInfo01](Media\GetInfo01.png)
 
 Second run a PowerShell step that will set the OU based on the condition that the computer existed.
 ```PowerShell
 $TSENV:OU = $TSENV:ADCOMPUTERPARENTDN
 ```
-![GetInfo02](media\GetInfo02.png)
+![GetInfo02](Media\GetInfo02.png)
 Condition: Query | ADComputerExists | Equals | TRUE
-![GetInfo03](media\GetInfo03.png)
+![GetInfo03](Media\GetInfo03.png)
 
 
 ## Demo
@@ -49,18 +49,18 @@ Condition: Query | ADComputerExists | Equals | TRUE
 This machine is currently in the RetailPOS OU, we'll start a reimage of the device.
 
 First you can see the computer already exists in the RetailPOS OU, and that was created at 11:04:36AM and the last time I reimaged was at 12:33:19PM on the same day, hence the Modified date.
-![GetInfo04](media\GetInfo04.png)
+![GetInfo04](Media\GetInfo04.png)
 
 Next during the OSD Process, it ran the server side script and pushed back all these variables to make available to the Task Sequence
-![GetInfo05](media\GetInfo05.png)
+![GetInfo05](Media\GetInfo05.png)
 
 Then based on the condition we set, it was evaluated true and set the OU variable to the one it grabbed from AD.
-![GetInfo06](media\GetInfo06.png)
+![GetInfo06](Media\GetInfo06.png)
 
 Next the ODJ step runs using the variables we created and returns successful join
-![GetInfo07](media\GetInfo07.png)
+![GetInfo07](Media\GetInfo07.png)
 
 Then going back into AD and refreshing, the object is still in the same OU, but with updated Modifed date to when I just ran OSD again and had the latest ODJ run.
-![GetInfo08](media\GetInfo08.png)
+![GetInfo08](Media\GetInfo08.png)
 
 Hope that helps someone!  Hit us up on Reddit if you need any more assistance. https://www.reddit.com/r/DeployR
