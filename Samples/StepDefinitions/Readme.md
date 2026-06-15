@@ -22,7 +22,7 @@ Import-DeployRStepDefinition -SourceFile "C:\Users\gary.blok\Downloads\753771ea-
 
 Grab all the scripts (or the ones needed for the steps you're wanting to import) and create a DeployR content item.  
 
-![Image01](./media/stepdef01.pngstepdef01.png)
+![Image01](./media/stepdef01.png)
 
 ### Update Step Definition to use the Content Item
 
