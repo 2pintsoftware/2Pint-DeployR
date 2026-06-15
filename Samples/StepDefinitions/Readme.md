@@ -30,6 +30,4 @@ Once the step definition is imported and content item created, set the content i
 
 ![Image02](./media/stepdef02.png)
 
-
-You can read more on my blog: https://garytown.com/deployr-importing-custom-step-definitions
-
+You can read more on my blog: <https://garytown.com/deployr-importing-custom-step-definitions>
