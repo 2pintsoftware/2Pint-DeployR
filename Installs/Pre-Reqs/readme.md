@@ -10,15 +10,15 @@ These have been last tested on June 1st, 2026, on a cleanly installed Windows 20
 
 ## Order
 
-- Install-PowerShell74X.ps1
+- Install-PowerShell74X.ps1 (DeployR 1.0 / 1.1)
 
-``` PowerShell 74 (DeployR 1.0 / 1.1)
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
 ```
 
-- Install-PowerShell76X.ps1
+- Install-PowerShell76X.ps1 (DeployR 1.2+)
 
-``` PowerShell 76 (DeployR 1.2+)
+``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell76X.ps1)
 ```
 
