@@ -10,10 +10,16 @@ These have been last tested on June 1st, 2026, on a cleanly installed Windows 20
 
 ## Order
 
-- Install-PowerShell74X.ps1
+- Install-PowerShell74X.ps1 (DeployR 1.0 / 1.1)
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell74X.ps1)
+```
+
+- Install-PowerShell76X.ps1 (DeployR 1.2+)
+
+``` PowerShell
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-PowerShell76X.ps1)
 ```
 
 - Install-DotNetRuntimes80X.ps1 (DeployR 1.0 / 1.1)
@@ -22,7 +28,7 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes80X.ps1)
 ```
 
-- Install-DotNetRuntimes100X.ps1 (DeployR 1.2)
+- Install-DotNetRuntimes100X.ps1 (DeployR 1.2+)
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes100X.ps1)
