@@ -8,6 +8,7 @@ Change Log
 - 2026.02.17 - Added Grabbing info of the DeployR Content Downloads Folder to a log
 - 2026.03.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
 - 2026.04.03 - Added check for default Content location.
+- 2026.06.22 - Added grabbing the 2PXE Service Config file if it exists
 #>
 
 
@@ -209,6 +210,11 @@ Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "
 #Get 2PXE | iPXE Event Logs
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*2PXE*"
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*iPXE*"
+
+#Grab the 2PXE Service Config if it exists (could have info about the iPXE WS Debug Log location)
+if (Test-Path -Path 'C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config'){
+    Copy-Item -Path 'C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config' -Destination $TempFolder -Force -ErrorAction SilentlyContinue
+}
 
 #Get iPXE DebugLog if exist
 $iPXEWSRegPath = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'
