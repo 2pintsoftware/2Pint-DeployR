@@ -1,3 +1,39 @@
+<#
+.SYNOPSIS
+Archives older DeployR OSD zip logs from the Logs folder into OSDLogsArchive.
+
+.DESCRIPTION
+This script finds the DeployR Content root, targets its child Logs folder, and moves
+date-prefixed OSD backup zip files older than a configured number of days into
+Logs\OSDLogsArchive.
+
+The script only processes zip files that match this naming style:
+YYYYMMDD_HHMMSS_<anything>.zip
+
+Examples:
+20260319_140415_OSD4C4C45440035.zip
+20260319_165328_OSDEE8DF6A9664A.zip
+
+Non-zip files and zip files that do not match the date-prefixed pattern are ignored.
+
+.NOTES
+How log location is discovered:
+1. Reads registry key HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings
+2. Uses property ContentLocation when present and path exists
+3. Falls back to $env:ProgramData\2Pint Software\DeployR\Content
+4. Uses Logs as a subfolder of Content: <ContentLocation>\Logs
+
+How to set archive age:
+- Use parameter -ArchiveAfterDays
+- Default is 14 days
+
+Examples:
+Dry run (no changes):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -WhatIf
+
+Archive files older than 30 days:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -ArchiveAfterDays 30
+#>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [ValidateRange(1, 3650)]
