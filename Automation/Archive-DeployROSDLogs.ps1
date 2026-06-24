@@ -27,17 +27,33 @@ How to set archive age:
 - Use parameter -ArchiveAfterDays
 - Default is 14 days
 
+How to clean up OSDLogsArchive:
+- Use switch -CleanupArchive to enable cleanup
+- Use -ArchiveCleanupAfterDays to control retention in archive
+- Default retention is 90 days (about 3 months)
+
 Examples:
 Dry run (no changes):
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -WhatIf
 
 Archive files older than 30 days:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -ArchiveAfterDays 30
+
+Archive files and also remove archived zip files older than 90 days:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -CleanupArchive
+
+Archive files and remove archived zip files older than 120 days:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Archive-DeployROSDLogs.ps1 -CleanupArchive -ArchiveCleanupAfterDays 120
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [ValidateRange(1, 3650)]
-    [int]$ArchiveAfterDays = 14
+    [int]$ArchiveAfterDays = 14,
+
+    [switch]$CleanupArchive,
+
+    [ValidateRange(1, 3650)]
+    [int]$ArchiveCleanupAfterDays = 90
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,18 +132,42 @@ $filesToArchive = Get-ChildItem -Path $logsPath -File -Filter '*.zip' | Where-Ob
 
 if (-not $filesToArchive) {
     Write-Host "No matching OSD zip files older than $ArchiveAfterDays days found in $logsPath" -ForegroundColor Green
-    return
 }
 
 $movedCount = 0
-foreach ($file in $filesToArchive) {
-    $destinationPath = Get-UniqueDestinationPath -ArchiveFolder $archivePath -FileName $file.Name
+if ($filesToArchive) {
+    foreach ($file in $filesToArchive) {
+        $destinationPath = Get-UniqueDestinationPath -ArchiveFolder $archivePath -FileName $file.Name
 
-    if ($PSCmdlet.ShouldProcess($file.FullName, "Move to $destinationPath")) {
-        Move-Item -LiteralPath $file.FullName -Destination $destinationPath -ErrorAction Stop
-        $movedCount++
-        Write-Host "Archived: $($file.Name)" -ForegroundColor DarkGray
+        if ($PSCmdlet.ShouldProcess($file.FullName, "Move to $destinationPath")) {
+            Move-Item -LiteralPath $file.FullName -Destination $destinationPath -ErrorAction Stop
+            $movedCount++
+            Write-Host "Archived: $($file.Name)" -ForegroundColor DarkGray
+        }
     }
 }
 
 Write-Host "Archived $movedCount file(s) to $archivePath" -ForegroundColor Green
+
+if ($CleanupArchive) {
+    $archiveCutoffDate = (Get-Date).AddDays(-$ArchiveCleanupAfterDays)
+    $archiveZipFilesToDelete = Get-ChildItem -Path $archivePath -File -Filter '*.zip' | Where-Object {
+        $_.LastWriteTime -lt $archiveCutoffDate
+    }
+
+    if (-not $archiveZipFilesToDelete) {
+        Write-Host "No archived zip files older than $ArchiveCleanupAfterDays days found in $archivePath" -ForegroundColor Green
+    }
+    else {
+        $deletedCount = 0
+        foreach ($archiveZip in $archiveZipFilesToDelete) {
+            if ($PSCmdlet.ShouldProcess($archiveZip.FullName, 'Delete archived zip file')) {
+                Remove-Item -LiteralPath $archiveZip.FullName -Force -ErrorAction Stop
+                $deletedCount++
+                Write-Host "Deleted archived zip: $($archiveZip.Name)" -ForegroundColor DarkGray
+            }
+        }
+
+        Write-Host "Deleted $deletedCount archived zip file(s) older than $ArchiveCleanupAfterDays days from $archivePath" -ForegroundColor Yellow
+    }
+}
