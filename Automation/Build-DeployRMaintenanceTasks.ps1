@@ -1,5 +1,80 @@
 <#
 .SYNOPSIS
+Creates DeployR maintenance assets for archiving OSD log zip files.
+
+.DESCRIPTION
+This script does two things:
+1. Creates C:\ProgramData\2Pint Software\Maintenance\Archive-DeployROSDLogs.ps1
+    by generating script content on the fly.
+2. Creates or updates a scheduled task that runs as SYSTEM and executes
+   the archive script daily.
+
+.NOTES
+Run this script elevated (as Administrator).
+#>
+
+[CmdletBinding()]
+param(
+    [string]$TaskName = 'Archive DeployR OSD Logs',
+    [string]$TaskPath = '\2Pint Software',
+    [datetime]$TaskTime = [datetime]'2:00 AM',
+
+    [ValidateRange(1, 3650)]
+    [int]$ArchiveAfterDays = 14,
+
+    [switch]$CleanupArchive = $true,
+
+    [ValidateRange(1, 3650)]
+    [int]$ArchiveCleanupAfterDays = 85
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Test-IsAdministrator {
+    $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function New-ScheduledTaskFolder {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FolderPath
+    )
+
+    $trimmedPath = $FolderPath.Trim('\')
+    if ([string]::IsNullOrWhiteSpace($trimmedPath)) {
+        return
+    }
+
+    $taskService = New-Object -ComObject Schedule.Service
+    $taskService.Connect()
+
+    try {
+        $null = $taskService.GetFolder("\$trimmedPath")
+    }
+    catch {
+        $rootFolder = $taskService.GetFolder("\")
+        $null = $rootFolder.CreateFolder($trimmedPath)
+    }
+}
+
+if (-not (Test-IsAdministrator)) {
+    Write-Warning 'This script must be run as Administrator.'
+    exit 1
+}
+
+$maintenanceFolder = Join-Path -Path $env:ProgramData -ChildPath '2Pint Software\Maintenance'
+$targetArchiveScriptPath = Join-Path -Path $maintenanceFolder -ChildPath 'Archive-DeployROSDLogs.ps1'
+
+if (-not (Test-Path -LiteralPath $maintenanceFolder)) {
+    New-Item -Path $maintenanceFolder -ItemType Directory -Force | Out-Null
+    Write-Host "Created maintenance folder: $maintenanceFolder" -ForegroundColor Cyan
+}
+
+$archiveScriptContent = @'
+<#
+.SYNOPSIS
 Archives older DeployR OSD zip logs from the Logs folder into OSDLogsArchive.
 
 .DESCRIPTION
@@ -250,3 +325,39 @@ if ($CleanupArchive) {
         Write-CMTraceLog -Message "Deleted $deletedCount archived zip file(s) older than $ArchiveCleanupAfterDays days from $archivePath" -Type Warning -Component 'Cleanup'
     }
 }
+'@
+
+$archiveScriptContent | Out-File -FilePath $targetArchiveScriptPath -Force -Encoding UTF8
+Write-Host "Created archive script: $targetArchiveScriptPath" -ForegroundColor Green
+
+New-ScheduledTaskFolder -FolderPath $TaskPath
+
+$taskArguments = @(
+    '-NoProfile'
+    '-ExecutionPolicy Bypass'
+    "-File `"$targetArchiveScriptPath`""
+    "-ArchiveAfterDays $ArchiveAfterDays"
+)
+
+if ($CleanupArchive) {
+    $taskArguments += '-CleanupArchive'
+    $taskArguments += "-ArchiveCleanupAfterDays $ArchiveCleanupAfterDays"
+}
+
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ($taskArguments -join ' ')
+$trigger = New-ScheduledTaskTrigger -Daily -At $TaskTime
+$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+
+$normalizedTaskPath = if ($TaskPath.EndsWith('\')) { $TaskPath } else { "$TaskPath\" }
+
+$existingTask = Get-ScheduledTask -TaskName $TaskName -TaskPath $normalizedTaskPath -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Unregister-ScheduledTask -TaskName $TaskName -TaskPath $normalizedTaskPath -Confirm:$false
+    Write-Host "Removed existing task: $normalizedTaskPath$TaskName" -ForegroundColor Yellow
+}
+
+Register-ScheduledTask -TaskName $TaskName -TaskPath $normalizedTaskPath -Action $action -Trigger $trigger -Principal $principal -Description 'DeployR OSD log archive maintenance task' -Force | Out-Null
+
+Write-Host "Scheduled task created: $normalizedTaskPath$TaskName" -ForegroundColor Green
+Write-Host "Runs daily at: $($TaskTime.ToString('hh:mm tt')) as SYSTEM" -ForegroundColor Green
+Write-Host "Task command: powershell.exe $($taskArguments -join ' ')" -ForegroundColor DarkGray
