@@ -36,16 +36,17 @@ Invoke-RestMethod -Uri $WebHookBotURL -Method POST -Body ($parameters | ConvertT
 $Vars = Get-ChildItem -path tsenv: 
 
 #Grab the progress variable to get the TS Name and UUID for the header of the message, then remove it from the Vars list so it doesn't get sent to Teams.
-$TSProgressJSON = ($Vars | Where-Object {$_.Name -eq 'DEPLOYRPROGRESS'}).value | ConvertFrom-Json
+$TSProgressJSON = ($Vars | Where-Object {$_.Name -eq '_DEPLOYRPROGRESS'}).value | ConvertFrom-Json
 $TSName = $TSProgressJSON.Name
 $TSUUID = $TSProgressJSON.UUID
 
 #Select only the Vars we want to send to Teams, and format them as a string with line breaks for the message body.
 $subVars = $Vars | Where-Object { 
-    $_.Name -notlike 'DEPLOYRPROGRESS*' -and
-    $_.Name -notlike 'DEPLOYRTASKSEQUENCERUN*' -and
+    $_.Name -notlike '_DEPLOYRPROGRESS*' -and
+    $_.Name -notlike '_DEPLOYRTASKSEQUENCERUN*' -and
     $_.Name -notlike '_SEQUENCESTATE*' -and
     $_.Name -notlike 'DEPLOYRCLIENTPASSCODE*' -and
+    $_.Name -notlike 'DEPLOYRCOMPLETEDSTEPS*' -and
     $_.Name -notlike 'DEPLOYRTOKEN*' -and
     $_.Name -notlike '_CI_*' -and
     $_.Name -notlike '_CIV_*' -and
