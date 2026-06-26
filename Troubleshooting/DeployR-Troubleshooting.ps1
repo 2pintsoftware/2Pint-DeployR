@@ -42,6 +42,7 @@ Change Log
 - 2026.04.01 - Added Notes around IIS & MIME Type, reminders that it's optional
 - 2026.04.16 - Added check for SQL String Connection based on iPXE WS Registry
 - 2026.06.26 - Added check for 2Pint API URL https://api.service.2pintsoftware.com
+- 2026.06.26 - Updated Min version for PS and .Net to 7.6.3 and 10.0.3 respectively for DeployR 1.3 Pre-Reqs
 
 
 To DO
