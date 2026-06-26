@@ -51,8 +51,8 @@ To DO
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
 
 #Keep this updated as needed 
-$DotNetMinVersion = '8.0.21'
-$PowerShellMinVersion = '7.4.13'
+$DotNetMinVersion = '10.0.3'
+$PowerShellMinVersion = '7.6.3'
 $ADKVersion = '10.1.26100.2454'
 
 # Check for Administrator role
@@ -98,44 +98,44 @@ $FirewallRules = @(
 function Test-CertificateChain {
     <#
     .SYNOPSIS
-        Builds and validates the certificate chain for a given certificate (by thumbprint)
-        and returns detailed results as a structured object.
-
+    Builds and validates the certificate chain for a given certificate (by thumbprint)
+    and returns detailed results as a structured object.
+    
     .PARAMETER Thumbprint
-        The thumbprint of the certificate in the Local Machine\Personal store (without spaces).
-
+    The thumbprint of the certificate in the Local Machine\Personal store (without spaces).
+    
     .PARAMETER RevocationMode
-        How to check revocation (Online, Offline, NoCheck). Default: Online.
-
+    How to check revocation (Online, Offline, NoCheck). Default: Online.
+    
     .EXAMPLE
-        Test-CertificateChain -Thumbprint "a1b2c3d4e5f67890..." | Format-List
-
+    Test-CertificateChain -Thumbprint "a1b2c3d4e5f67890..." | Format-List
+    
     .EXAMPLE
-        $result = Test-CertificateChain -Thumbprint "..." -RevocationMode Offline
-        $result.ChainValid
-        $result.ChainElements
-        $result.ChainErrors
+    $result = Test-CertificateChain -Thumbprint "..." -RevocationMode Offline
+    $result.ChainValid
+    $result.ChainElements
+    $result.ChainErrors
     #>
-
+    
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [ValidatePattern('^[0-9A-Fa-f]{40}$')]
-        [string]$Thumbprint,
-
-        [ValidateSet('Online', 'Offline', 'NoCheck')]
-        [string]$RevocationMode = 'Online',
-
-        [System.Security.Cryptography.X509Certificates.X509VerificationFlags]$VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[0-9A-Fa-f]{40}$')]
+    [string]$Thumbprint,
+    
+    [ValidateSet('Online', 'Offline', 'NoCheck')]
+    [string]$RevocationMode = 'Online',
+    
+    [System.Security.Cryptography.X509Certificates.X509VerificationFlags]$VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag
     )
-
+    
     # Normalize thumbprint (remove any spaces just in case)
     $Thumbprint = $Thumbprint -replace '\s', ''
-
+    
     # Try to get the certificate
     $certPath = "Cert:\LocalMachine\My\$Thumbprint"
     $cert = Get-Item $certPath -ErrorAction SilentlyContinue
-
+    
     if (-not $cert) {
         return [PSCustomObject]@{
             Thumbprint     = $Thumbprint
@@ -147,21 +147,21 @@ function Test-CertificateChain {
             RawChain       = $null
         }
     }
-
+    
     # Build the chain
     $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
-
+    
     # Set revocation checking
     switch ($RevocationMode) {
         'Online'  { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Online }
         'Offline' { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::Offline }
         'NoCheck' { $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck }
     }
-
+    
     $chain.ChainPolicy.VerificationFlags = $VerificationFlags
-
+    
     $buildSuccess = $chain.Build($cert)
-
+    
     # Collect chain elements
     $elements = @()
     foreach ($element in $chain.ChainElements) {
@@ -174,7 +174,7 @@ function Test-CertificateChain {
             HasPrivateKey = $element.Certificate.HasPrivateKey
         }
     }
-
+    
     # Collect any chain status errors
     $errors = @()
     foreach ($status in $chain.ChainStatus) {
@@ -183,7 +183,7 @@ function Test-CertificateChain {
             StatusInformation = $status.StatusInformation
         }
     }
-
+    
     # Final result object
     $result = [PSCustomObject]@{
         Thumbprint       = $cert.Thumbprint
@@ -198,7 +198,7 @@ function Test-CertificateChain {
         ChainElementCount = $elements.Count
         RawChain         = $chain
     }
-
+    
     return $result
 }
 function Get-SqlInstances {
@@ -991,9 +991,9 @@ foreach ($app in $PreReqAppsStatus) {
 
 #Double Check PowerShell is NOT 7.5 or above    
 $PowerShellVersionInstalled = $PSVersionTable.PSVersion.ToString()
-if ([version]$PowerShellVersionInstalled -ge [version]'7.5') {
+if ([version]$PowerShellVersionInstalled -le [version]'7.6') {
     Write-Host "=========================================================================" -ForegroundColor Red
-    Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
+    #Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
     Write-Host "   Installed Version: $PowerShellVersionInstalled" -ForegroundColor DarkGray
     Write-Host "   Required  Version: $PowerShellMinVersion" -ForegroundColor DarkGray
     Write-Host "=========================================================================" -ForegroundColor Red
@@ -1001,9 +1001,9 @@ if ([version]$PowerShellVersionInstalled -ge [version]'7.5') {
 #Double Check PowerShell is NOT 7.5 or above    
 $PowerShellVersionInstalled = $installedApps | Where-Object { $_.DisplayName -match "PowerShell 7" } | Select-Object -First 1 | ForEach-Object {
     if ($_.DisplayVersion -match "\d+\.\d+\.\d+") {
-        if ($matches[0] -ge [version]'7.5') {
+        if ($matches[0] -le [version]'7.6') {
             Write-Host "=========================================================================" -ForegroundColor Red
-            Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
+            #Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
             Write-Host "   Installed Version: $PowerShellVersionInstalled" -ForegroundColor DarkGray
             Write-Host "   Required  Version: $PowerShellMinVersion" -ForegroundColor DarkGray
             Write-Host "=========================================================================" -ForegroundColor Red
@@ -1136,7 +1136,7 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
     catch {
         write-host "Catch block executed"
     }
-
+    
     if (Get-Module -name WebAdministration) {
         $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
         # Loop through required MIME types and check if present in IIS
@@ -1279,6 +1279,45 @@ if ($Installed_2Pint_Software_StifleR_Server){
         $HeartbeatResponse = Invoke-WebRequest -Uri "https://api.service.2pintsoftware.com" -UseBasicParsing -ErrorAction Stop
         if ($HeartbeatResponse.StatusCode -eq 200) {
             Write-Host "✓ Successfully connected to 2Pint Heartbeat URL." -ForegroundColor Green
+            
+            # LicenseKeys may be a JSON array string or an array-like value, so normalize it first.
+            $licenseKeys = $StifleRRegData.LicenseKeys
+            if ($licenseKeys -is [string]) {
+                $trimmedLicenseKeys = $licenseKeys.Trim()
+                if ($trimmedLicenseKeys.StartsWith('[') -and $trimmedLicenseKeys.EndsWith(']')) {
+                    $licenseKeys = $trimmedLicenseKeys | ConvertFrom-Json
+                }
+                else {
+                    $licenseKeys = @($trimmedLicenseKeys)
+                }
+            }
+            elseif ($licenseKeys -isnot [System.Collections.IEnumerable] -or $licenseKeys -is [string]) {
+                $licenseKeys = @($licenseKeys)
+            }
+
+            $prod = $null
+            foreach ($licenseKey in @($licenseKeys | Where-Object { $_ })) {
+                Write-Host "Testing 2Pint Heartbeat with a license key..." -ForegroundColor DarkGray
+                $headers = @{ 
+                    "X-API-Key" = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.Text.Encoding]::UTF8.GetBytes($licenseKey)))
+                }
+
+                try {
+                    $prod = Invoke-RestMethod -Uri "https://api.service.2pintsoftware.com/location/ip" -Method Get -Headers $headers -ErrorAction Stop
+                    if ($prod) {
+                        Write-Host "License key validated successfully." -ForegroundColor Green
+                        #$prod
+                        break
+                    }
+                }
+                catch {
+                    Write-Host "License key failed, trying next one if available..." -ForegroundColor Yellow
+                }
+            }
+
+            if (-not $prod) {
+                Write-Host "No valid license key was accepted by the 2Pint Heartbeat service." -ForegroundColor Red
+            }
         }
         else {
             Write-Host "✗ Failed to connect to 2Pint Heartbeat URL. Status Code: $($HeartbeatResponse.StatusCode)" -ForegroundColor Red
@@ -1287,8 +1326,9 @@ if ($Installed_2Pint_Software_StifleR_Server){
     catch {
         Write-Host "✗ Error connecting to 2Pint Heartbeat URL: $_" -ForegroundColor Red
     }
-
-
+    
+    
+    
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Checking for StifleRDashboard Web Virtual Directory..." -ForegroundColor Cyan
     
@@ -1442,8 +1482,8 @@ if ($Installed_2Pint_Software_DeployR){
         }
         write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
-
-
+    
+    
     if ($DeployRRegData -and $DeployRRegData.ContentLocation) {
         Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
         $DeployRContentPath = $DeployRRegData.ContentLocation
@@ -1698,7 +1738,7 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
     $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     if ($iPXEcertHash) {
         Write-Host  "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
-
+        
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $iPXEcertHash }
         if ($CertThumbprint) {
             Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
@@ -1731,10 +1771,10 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
     $2PXEcertHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     $2PXEConfigFilePath = "C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config"
-
+    
     if ($2PXEcertHash) {
         Write-Host  "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
-
+        
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $2PXEcertHash }
         if ($CertThumbprint) {
             Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
@@ -1791,7 +1831,7 @@ if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Soft
             Write-Host "2PXE Config Missing Value for iPXEAnywhereWebServiceURI" -ForegroundColor Red
         }
     }
-
+    
 }
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
     if (Test-Path -Path $2PXEConfigFilePath) {
