@@ -41,6 +41,7 @@ Change Log
 - 2026.02.24 - Added check for matching certificate thumbprints between iPXE WS and 2PXE if both are installed
 - 2026.04.01 - Added Notes around IIS & MIME Type, reminders that it's optional
 - 2026.04.16 - Added check for SQL String Connection based on iPXE WS Registry
+- 2026.06.26 - Added check for 2Pint API URL https://api.service.2pintsoftware.com
 
 
 To DO
@@ -1269,6 +1270,25 @@ if ($Installed_2Pint_Software_StifleR_Server){
         Write-Host "Certificate NOT found." -ForegroundColor Red
     }
     
+    #Test the 2Pint Heartbeat URL 'https://api.service.2pintsoftware.com'
+    Write-Host "=========================================================================" -ForegroundColor DarkGray
+    write-Host "Testing 2Pint Heartbeat URL: https://api.service.2pintsoftware.com" -ForegroundColor Cyan
+    write-host "This is used to confirm the StifleR Server can reach the 2Pint Heartbeat service." -ForegroundColor DarkGray
+    write-host "This is also used for DeployR Driverpack page and any steps that pull cloud content" -ForegroundColor DarkGray
+    try {
+        $HeartbeatResponse = Invoke-WebRequest -Uri "https://api.service.2pintsoftware.com" -UseBasicParsing -ErrorAction Stop
+        if ($HeartbeatResponse.StatusCode -eq 200) {
+            Write-Host "✓ Successfully connected to 2Pint Heartbeat URL." -ForegroundColor Green
+        }
+        else {
+            Write-Host "✗ Failed to connect to 2Pint Heartbeat URL. Status Code: $($HeartbeatResponse.StatusCode)" -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "✗ Error connecting to 2Pint Heartbeat URL: $_" -ForegroundColor Red
+    }
+
+
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Checking for StifleRDashboard Web Virtual Directory..." -ForegroundColor Cyan
     
@@ -1453,7 +1473,6 @@ if ($Installed_2Pint_Software_DeployR){
         }
         write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
-    
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
