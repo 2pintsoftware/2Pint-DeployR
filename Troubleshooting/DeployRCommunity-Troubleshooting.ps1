@@ -3,51 +3,19 @@
 USE POWERSHELL 7.  This doesn't work properly from PowerShell 5 Terminal.
 
 - Check if all required applications are installed
-- Validate server configuration settings
 - Ensure firewall rules are correctly set
 - Checks Connectivity for DeployR / StifleR URLs & Ports based on Registry Entries
 - Check if BranchCache is enabled
-- Check if IIS components are installed
-- Check if IIS Virtual Web Directory is Setup
-- Check if IIS MIME types added
 - Check StifleR Dashboard URLs in Registry & Server Config File
 - Check for Certificate set in StifleR & DeployR is same and that the thumbprint exists
 - Check if all required services are running
-- Check for SQL String Connection based on DeployR Registry
-- Check for SQL Permissions of NT AUTHORITY\SYSTEM for sysadmin and dbcreator roles
-- Check for SQL Permissions of NT AUTHORITY\SYSTEM for db_owner on all databases
-- Check for SQL String Connection based on iPXE WS Registry
+- Check Certificates on Ports 9000 & 8050
 
 
-
-Remediation at end will prompt to remediate:
-- Missing IIS MIME types
-- Missing IIS Virtual Directories
-- Missing Windows Components
 
 Change Log
-- 2025.10.22 - Updated .NET version to 8.0.21
-- 2025.10.29 - Updated PowerShell version to 7.4.13
-- 2025.10.29 - Added SQL Permissions checks for NT AUTHORITY\SYSTEM
-- 2026.01.26 - Updated script to handle when it finds multiple installed versions of .net Software in registry
-- 2026.01.27 - Updated C++ Name to Microsoft Visual C++ v14 Redistributable (x64) to match MS new naming
-- 2026.01.27 - Add DeployR Registry Log File
-- 2026.02.02 - Added ADK Version Check.
-- 2026.02.16 - Updated MIME Type Section to remove errors on duplicates
-- 2026.02.17 - Added BackConnectionHostNames registry check
-- 2026.02.17 - Added Freespace check on the Volume the DeployR Content is located
-- 2026.02.17 - Added check for .net 4.8 on 2019 ServerOS
-- 2026.02.24 - Added iPXE & 2PXE Apps to list, noted as OPTIONAL
-- 2026.02.24 - Added check for matching certificate thumbprints between iPXE WS and 2PXE if both are installed
-- 2026.04.01 - Added Notes around IIS & MIME Type, reminders that it's optional
-- 2026.04.16 - Added check for SQL String Connection based on iPXE WS Registry
-- 2026.06.26 - Added check for 2Pint API URL https://api.service.2pintsoftware.com
-- 2026.06.26 - Updated Min version for PS and .Net to 7.6.3 and 10.0.3 respectively for DeployR 1.3 Pre-Reqs
-- 2026.07.02 - Updated to do better match on the ADK
+- 26.07.26 - Started with DeployR Troubleshooting Script and modified for Community
 
-To DO
-- Add if Statements for SQL Permissions checks and remediation, first check connection string to get instance name
-#>
 
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
 
@@ -70,16 +38,11 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
 [PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
 [PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
-[PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
-[PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
-[PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
-[PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/deployr'}
+[PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
+[PSCustomObject]@{Title = '2Pint Software DeployR Community (bundle)'; Installed = $false; Notes = 'Required for DeployR Community Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
 [PSCustomObject]@{Title = '2Pint Software StifleR Server'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
-[PSCustomObject]@{Title = '2Pint Software StifleR WmiAgent'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
-[PSCustomObject]@{Title = '2Pint Software StifleR ActionHub'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
-[PSCustomObject]@{Title = '2Pint Software iPXE Anywhere WebService'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/ipxe-ws'}
-[PSCustomObject]@{Title = '2Pint Software PXE Server'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/2pxe-server'}
+[PSCustomObject]@{Title = '2Pint Software iPXE Anywhere 2PXE Service'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/2pxe-server'}
 
 )
 $FirewallRules = @(
@@ -88,8 +51,6 @@ $FirewallRules = @(
 [PSCustomObject]@{DisplayName = '2Pint Software StifleR API 9000'; Port = 9000; Protocol = 'TCP'}
 [PSCustomObject]@{DisplayName = '2Pint Software StifleR SignalR 1414 TCP'; Port = 1414; Protocol = 'TCP'}
 [PSCustomObject]@{DisplayName = '2Pint Software StifleR SignalR 1414 UDP'; Port = 1414; Protocol = 'UDP'}
-[PSCustomObject]@{DisplayName = '2Pint iPXE WebService 8051'; Port = 8051; Protocol = 'TCP'}
-[PSCustomObject]@{DisplayName = '2Pint iPXE WebService 8052'; Port = 8052; Protocol = 'TCP'}
 [PSCustomObject]@{DisplayName = '2Pint 2PXE 8050'; Port = 8050; Protocol = 'TCP'}
 [PSCustomObject]@{DisplayName = '2Pint 2PXE 4011'; Port = 4011; Protocol = 'UDP'}
 )
@@ -202,125 +163,6 @@ function Test-CertificateChain {
     
     return $result
 }
-function Get-SqlInstances {
-    <#
-    .SYNOPSIS
-    Finds SQL Server instances installed on the local server.
-    
-    .DESCRIPTION
-    Queries the registry and services to discover SQL Server instances on the local machine.
-    Returns information about each instance including name, version, edition, and running status.
-    
-    .EXAMPLE
-    $instances = Get-SqlInstances
-    $instances | Format-Table -AutoSize
-    
-    .OUTPUTS
-    PSCustomObject with properties: InstanceName, ServiceName, IsRunning, Version, Edition, InstancePath
-    #>
-    [CmdletBinding()]
-    param()
-    
-    $instances = @()
-    
-    try {
-        # Check for SQL Server instances in registry
-        $regPath = 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server'
-        
-        if (Test-Path $regPath) {
-            # Get installed instances
-            $installedInstances = Get-ItemProperty -Path "$regPath" -Name InstalledInstances -ErrorAction SilentlyContinue
-            
-            if ($installedInstances.InstalledInstances) {
-                foreach ($instanceName in $installedInstances.InstalledInstances) {
-                    # Determine service name
-                    if ($instanceName -eq 'MSSQLSERVER') {
-                        $serviceName = 'MSSQLSERVER'
-                        $displayName = '(Default Instance)'
-                        $connectionName = '.'
-                    }
-                    else {
-                        $serviceName = "MSSQL`$$instanceName"
-                        $displayName = $instanceName
-                        $connectionName = ".\$instanceName"
-                    }
-                    
-                    # Get service status
-                    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-                    $isRunning = $service.Status -eq 'Running'
-                    
-                    # Try to get instance details from registry
-                    $instanceRegPath = "$regPath\Instance Names\SQL"
-                    $instanceKey = Get-ItemProperty -Path $instanceRegPath -Name $instanceName -ErrorAction SilentlyContinue
-                    
-                    $version = 'Unknown'
-                    $edition = 'Unknown'
-                    $instancePath = 'Unknown'
-                    
-                    if ($instanceKey) {
-                        $instanceId = $instanceKey.$instanceName
-                        $setupPath = "$regPath\$instanceId\Setup"
-                        
-                        if (Test-Path $setupPath) {
-                            $setupInfo = Get-ItemProperty -Path $setupPath -ErrorAction SilentlyContinue
-                            $version = $setupInfo.Version
-                            $edition = $setupInfo.Edition
-                            $instancePath = $setupInfo.SQLPath
-                        }
-                    }
-                    
-                    $instances += [PSCustomObject]@{
-                        InstanceName = $displayName
-                        ConnectionString = $connectionName
-                        ServiceName = $serviceName
-                        IsRunning = $isRunning
-                        Status = if ($service) { $service.Status } else { 'Not Found' }
-                        Version = $version
-                        Edition = $edition
-                        InstancePath = $instancePath
-                    }
-                }
-            }
-        }
-        
-        # If no instances found in registry, check for running SQL services
-        if ($instances.Count -eq 0) {
-            $sqlServices = Get-Service -Name "MSSQL*" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^MSSQL\$' -or $_.Name -eq 'MSSQLSERVER' }
-            
-            foreach ($service in $sqlServices) {
-                if ($service.Name -eq 'MSSQLSERVER') {
-                    $instanceName = '(Default Instance)'
-                    $connectionName = '.'
-                }
-                else {
-                    $instanceName = $service.Name -replace '^MSSQL\$', ''
-                    $connectionName = ".\$instanceName"
-                }
-                
-                $instances += [PSCustomObject]@{
-                    InstanceName = $instanceName
-                    ConnectionString = $connectionName
-                    ServiceName = $service.Name
-                    IsRunning = $service.Status -eq 'Running'
-                    Status = $service.Status
-                    Version = 'Unknown'
-                    Edition = 'Unknown'
-                    InstancePath = 'Unknown'
-                }
-            }
-        }
-    }
-    catch {
-        Write-Error "Failed to enumerate SQL instances $_"
-    }
-    
-    if ($instances.Count -eq 0) {
-        Write-Warning "No SQL Server instances found on this server."
-    }
-    
-    return $instances
-}
-
 function Get-InstalledApps
 {
     if (![Environment]::Is64BitProcess) {
@@ -347,103 +189,6 @@ function Get-InstalledApps
     return $allApps | Sort-Object DisplayName
 }
 
-function Set-SqlServerPermissions {
-    <#
-    .SYNOPSIS
-    Configures the permissions and firewall rules for Microsoft SQL Server.
-    
-    .DESCRIPTION
-    This function grants permissions to NT AUTHORITY\SYSTEM (sysadmin and dbcreator roles) 
-    and configures the firewall rules for SQL Server default instance and Browser service.
-    
-    .PARAMETER InstanceName
-    The name of the SQL Server instance. Use 'MSSQLSERVER' for the default instance.
-    Default is 'SQLEXPRESS'.
-    
-    .PARAMETER SkipFirewall
-    If specified, skips creating firewall rules.
-    
-    .EXAMPLE
-    Set-SqlServerPermissionsAndFirewall -InstanceName 'SQLEXPRESS'
-    
-    .EXAMPLE
-    Set-SqlServerPermissionsAndFirewall -InstanceName 'MSSQLSERVER' -SkipFirewall
-    
-    .NOTES
-    Author: Mike Terrill/2Pint Software
-    Date: August 4, 2025
-    Version: 25.08.04
-    Requires: Administrative privileges, 64-bit Windows, sqlcmd installed
-    #>
-    [CmdletBinding()]
-    param(
-    [Parameter()]
-    [string]$InstanceName = 'SQLEXPRESS'
-    
-    )
-    
-    # Ensure the script runs with elevated privileges
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Error "This function requires administrative privileges. Please run PowerShell as Administrator."
-        return $false
-    }
-    
-    # Determine server instance connection string
-    if ($InstanceName -eq 'MSSQLSERVER') {
-        $ServerInstance = '.'
-    }
-    else {
-        $ServerInstance = ".\$InstanceName"
-    }
-    
-    # Find sqlcmd.exe
-    $SqlCmdPath = $null
-    $possiblePaths = @(
-    "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\sqlcmd.exe",
-    "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\180\Tools\Binn\sqlcmd.exe",
-    "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\190\Tools\Binn\sqlcmd.exe",
-    "C:\Program Files\Microsoft SQL Server\160\Tools\Binn\sqlcmd.exe",
-    "C:\Program Files\Microsoft SQL Server\150\Tools\Binn\sqlcmd.exe",
-    "C:\Program Files\Microsoft SQL Server\140\Tools\Binn\sqlcmd.exe"
-    )
-    
-    foreach ($path in $possiblePaths) {
-        if (Test-Path $path) {
-            $SqlCmdPath = $path
-            break
-        }
-    }
-    
-    if (-not $SqlCmdPath) {
-        Write-Error "sqlcmd.exe not found. Please ensure SQL Server client tools are installed."
-        return $false
-    }
-    
-    Write-Host "Using sqlcmd at: $SqlCmdPath" -ForegroundColor Cyan
-    
-    # Grant NT AUTHORITY\SYSTEM sysadmin and dbcreator rights
-    Write-Host "Granting permissions to NT AUTHORITY\SYSTEM on $ServerInstance..." -ForegroundColor Cyan
-    
-    $TsqlQuery = "IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'NT AUTHORITY\SYSTEM') CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS; EXEC sp_addsrvrolemember @loginame = 'NT AUTHORITY\SYSTEM', @rolename = 'sysadmin'; EXEC sp_addsrvrolemember @loginame = 'NT AUTHORITY\SYSTEM', @rolename = 'dbcreator';"
-    
-    try {
-        $Process = Start-Process -FilePath $SqlCmdPath -ArgumentList "-S `"$ServerInstance`" -Q `"$TsqlQuery`"" -NoNewWindow -PassThru -Wait -ErrorAction Stop
-        if ($Process.ExitCode -eq 0) {
-            Write-Host "Successfully granted sysadmin and dbcreator roles to NT AUTHORITY\SYSTEM on $ServerInstance." -ForegroundColor Green
-        }
-        else {
-            Write-Error "sqlcmd failed with exit code $($Process.ExitCode)."
-            return $false
-        }
-    }
-    catch {
-        Write-Error "Failed to execute sqlcmd. Error: $($_.Exception.Message)"
-        Write-Host "Ensure sqlcmd is installed and the SQL Server instance ($ServerInstance) is running." -ForegroundColor Yellow
-        return $false
-    }
-    
-    return $true
-}
 function Test-Url {
     param (
     [string]$Url
@@ -470,181 +215,6 @@ function Test-Url {
     catch {
         Write-Output "URL is not accessible: $Url - Error: $_"
     }
-}
-function Test-SQLConnection {
-    param(
-    [Parameter(Mandatory=$true)]
-    [string]$ConnectionString
-    )
-    
-    try {
-        $connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
-        $connection.Open()
-        Write-Host " Connection successful!" -ForegroundColor Green
-        $connection.Close()
-    }
-    catch {
-        Write-Host "Connection failed: $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
-function Test-SystemSqlPermissions {
-    [CmdletBinding()]
-    param(
-    [string]
-    $Instance = 'localhost\SQLEXPRESS',
-    
-    [switch]
-    $UseInvokeSqlCmd
-    )
-    
-    $result = [PSCustomObject]@{
-        Instance    = $Instance
-        LoginExists = $false
-        IsSysadmin  = $false
-        IsDbCreator = $false
-        Error       = $null
-    }
-    
-    try {
-        # T-SQL to check if NT AUTHORITY\\SYSTEM exists as a login and check role membership
-        # Try matching by SID first; if SID is NULL (unlikely), fall back to name search for principals containing 'system'
-        $tsql = @"
-SET NOCOUNT ON;
-DECLARE @loginname sysname = N'NT AUTHORITY\\SYSTEM';
-DECLARE @sid varbinary(85) = SUSER_SID(@loginname);
-        
-;WITH principals AS (
-    SELECT principal_id, name, sid
-    FROM sys.server_principals
-    WHERE (sid IS NOT NULL AND sid = @sid)
-    OR ( @sid IS NULL AND LOWER(name) LIKE '%system%')
-    OR (LOWER(name) LIKE '%nt authority%system%')
-)
-SELECT
-    CASE WHEN EXISTS(SELECT 1 FROM principals) THEN 1 ELSE 0 END AS LoginExists,
-    CASE WHEN EXISTS(
-        SELECT 1 FROM principals p
-        JOIN sys.server_role_members srm ON p.principal_id = srm.member_principal_id
-        JOIN sys.server_principals r ON srm.role_principal_id = r.principal_id
-        WHERE r.name = 'sysadmin') THEN 1 ELSE 0 END AS IsSysadmin,
-    CASE WHEN EXISTS(
-        SELECT 1 FROM principals p
-        JOIN sys.server_role_members srm ON p.principal_id = srm.member_principal_id
-        JOIN sys.server_principals r ON srm.role_principal_id = r.principal_id
-        WHERE r.name = 'dbcreator') THEN 1 ELSE 0 END AS IsDbCreator;
-"@
-        
-        if ($UseInvokeSqlCmd) {
-            if (-not (Get-Module -ListAvailable -Name SqlServer)) {
-                throw "SqlServer module is not available; install it or run without -UseInvokeSqlCmd."
-            }
-            $rows = Invoke-Sqlcmd -ServerInstance $Instance -Query $tsql -ErrorAction Stop
-            if ($rows) {
-                $result.LoginExists = [bool]$rows.LoginExists
-                $result.IsSysadmin  = [bool]$rows.IsSysadmin
-                $result.IsDbCreator = [bool]$rows.IsDbCreator
-            }
-        }
-        else {
-            # Use System.Data.SqlClient to run the query
-            $connString = "Server=$Instance;Integrated Security=True;Connection Timeout=5;"
-            $conn = New-Object System.Data.SqlClient.SqlConnection $connString
-            $cmd = $conn.CreateCommand()
-            $cmd.CommandText = $tsql
-            $conn.Open()
-            $reader = $cmd.ExecuteReader()
-            if ($reader.Read()) {
-                $loginExists = $reader['LoginExists'] -as [int]
-                $isSys = $reader['IsSysadmin'] -as [int]
-                $isDb  = $reader['IsDbCreator'] -as [int]
-                $result.LoginExists = ($loginExists -eq 1)
-                $result.IsSysadmin  = ($isSys -eq 1)
-                $result.IsDbCreator = ($isDb -eq 1)
-            }
-            $reader.Close()
-            $conn.Close()
-        }
-        
-    }
-    catch {
-        $result.Error = $_.Exception.Message
-    }
-    
-    return $result
-}
-function Test-SqlDatabases {
-    [CmdletBinding()]
-    param(
-    [string]
-    $Instance = 'localhost\SQLEXPRESS',
-    
-    [switch]
-    $UseInvokeSqlCmd
-    )
-    
-    $result = [PSCustomObject]@{
-        Instance  = $Instance
-        Databases = @()
-        Error     = $null
-    }
-    
-    try {
-        # Get all databases from the instance (excluding system databases)
-        $tsql = @"
-SET NOCOUNT ON;
-SELECT 
-    d.name AS DatabaseName,
-    d.database_id AS DatabaseId,
-    d.create_date AS CreateDate,
-    d.state_desc AS State,
-    d.recovery_model_desc AS RecoveryModel
-FROM sys.databases d
-WHERE d.name NOT IN ('master', 'tempdb', 'model', 'msdb')
-ORDER BY d.name;
-"@
-        
-        if ($UseInvokeSqlCmd) {
-            if (-not (Get-Module -ListAvailable -Name SqlServer)) {
-                throw "SqlServer module is not available; install it or run without -UseInvokeSqlCmd."
-            }
-            $rows = Invoke-Sqlcmd -ServerInstance $Instance -Query $tsql -ErrorAction Stop
-            foreach ($row in $rows) {
-                $result.Databases += [PSCustomObject]@{
-                    Name          = $row.DatabaseName
-                    DatabaseId    = $row.DatabaseId
-                    CreateDate    = $row.CreateDate
-                    State         = $row.State
-                    RecoveryModel = $row.RecoveryModel
-                }
-            }
-        }
-        else {
-            # Use System.Data.SqlClient to run the query
-            $connString = "Server=$Instance;Integrated Security=True;Connection Timeout=5;"
-            $conn = New-Object System.Data.SqlClient.SqlConnection $connString
-            $cmd = $conn.CreateCommand()
-            $cmd.CommandText = $tsql
-            $conn.Open()
-            $reader = $cmd.ExecuteReader()
-            while ($reader.Read()) {
-                $result.Databases += [PSCustomObject]@{
-                    Name          = $reader['DatabaseName'] -as [string]
-                    DatabaseId    = $reader['DatabaseId'] -as [int]
-                    CreateDate    = $reader['CreateDate'] -as [DateTime]
-                    State         = $reader['State'] -as [string]
-                    RecoveryModel = $reader['RecoveryModel'] -as [string]
-                }
-            }
-            $reader.Close()
-            $conn.Close()
-        }
-        
-    }
-    catch {
-        $result.Error = $_.Exception.Message
-    }
-    
-    return $result
 }
 function Test-SystemDatabaseOwnership {
     [CmdletBinding()]
@@ -740,43 +310,6 @@ SELECT @dbName AS ActualDbName, CASE WHEN @dbName IS NULL THEN 0 ELSE 1 END AS D
     return $result
 }
 
-function Set-IISMIMETypes {
-    # Set the MIME Types for the iPXE boot files, fonts, etc.
-    # v2.0 - accounts for duplicates (e.g. BIN, TTF, WIM)
-    
-    $mimeTypeList = @(
-    @(".",     "application/octet-stream"), # BCD file (with no extension)
-    @(".bcd",  "application/octet-stream"), # boot.bcd boot configuration files
-    @(".bin",  "application/octet-stream"), # wimboot.bin file
-    @(".com",  "application/octet-stream"), # BIOS boot loaders
-    @(".efi",  "application/octet-stream"), # EFI loader files
-    @(".img",  "application/octet-stream"), # .img file type
-    @(".ipxe", "text/plain"),               # .ipxe file
-    @(".iso",  "application/octet-stream"), # .iso file type
-    @(".kpxe", "application/octet-stream"), # For the UNDIonly version of iPXE
-    @(".n12",  "application/octet-stream"), # BIOS loaders without F12 key press
-    @(".pxe",  "application/octet-stream"), # For the iPXE BIOS loader files
-    @(".sdi",  "application/octet-stream"), # For the boot.sdi file
-    @(".ttf",  "application/octet-stream"), # For the boot fonts
-    @(".wim",  "application/octet-stream")  # For the winpe images itself
-    )
-    
-    foreach($mimeType in $mimeTypeList)
-    {
-        #$mimeType[0] - extension; $mimeType[1] - mimeType
-        if((Get-WebConfigurationProperty -Filter "system.webServer/staticContent" -Name "Collection").Where({$_.fileExtension -eq $mimeType[0]}).Count)
-        {
-            # Update the existing setting without destroying everything else :)
-            Set-WebConfigurationProperty -Filter "system.webServer/staticContent/mimeMap[@fileExtension='$($mimeType[0])']" -Name "mimeType" -Value $mimeType[1]
-        } 
-        else 
-        {
-            # Add a new setting
-            Add-WebConfigurationProperty //staticContent -name collection -value @{fileExtension=$mimeType[0];mimeType=$mimeType[1]}
-        }
-    }
-}
-
 function Get-BackConnectionHostNames {
     $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
     $propertyName = "BackConnectionHostNames"
@@ -850,8 +383,8 @@ function Get-FreeSpaceAvailable {
 #endregion
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
-$TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting.log"
-$InstalledAppsFilePath = "$TempFolder\InstalledApps.log"
+$TranscriptFilePath = "$TempFolder\Check-DeployRCommunity_TroubleShooting.log"
+$InstalledAppsFilePath = "$TempFolder\DeployRCommunity_InstalledApps.log"
 if (Test-Path -Path $TranscriptFilePath) {
     Remove-Item -Path $TranscriptFilePath -Force
 }
@@ -1090,13 +623,7 @@ Write-Host "====================================================================
 Write-Host "Confirming Windows Features for DeployR" -ForegroundColor Cyan
 #Confirm Windows Components
 $RequiredWindowsComponents = @(
-"BranchCache",
-"Web-Server",
-"Web-Http-Errors",
-"Web-Static-Content",
-"Web-Digest-Auth",
-"Web-Windows-Auth",
-"Web-Mgmt-Console"
+"BranchCache"
 )
 
 foreach ($Component in $RequiredWindowsComponents) {
@@ -1110,91 +637,13 @@ foreach ($Component in $RequiredWindowsComponents) {
 if ($MissingComponents) {
     Write-Host "The following required components are missing:" -ForegroundColor Red
     Write-Host "Remediation: Run following Command"
-    write-host -ForegroundColor darkgray "Add-WindowsFeature Web-Server, Web-Http-Errors, Web-Static-Content, Web-Digest-Auth, Web-Windows-Auth, Web-Mgmt-Console, BranchCache"
+    write-host -ForegroundColor darkgray "Add-WindowsFeature BranchCache"
     
-}
-
-if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
-    Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, then most of these will be needed." -ForegroundColor Yellow
-    # Table of required MIME types for iPXE and related boot files
-    $RequiredMimeTypes = @(
-    [PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
-    [PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
-    [PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
-    [PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
-    [PSCustomObject]@{ Extension = ".sdi";  MimeType = "application/octet-stream"; Description = "boot.sdi file" },
-    [PSCustomObject]@{ Extension = ".bcd";  MimeType = "application/octet-stream"; Description = "boot.bcd boot configuration files" },
-    [PSCustomObject]@{ Extension = ".";     MimeType = "application/octet-stream"; Description = "BCD file (with no extension)" },
-    [PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
-    [PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
-    [PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
-    [PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
-    [PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
-    [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
-    [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
-    )
-    try {
-        Import-Module WebAdministration -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-    }
-    catch {
-        write-host "Catch block executed"
-    }
-    
-    if (Get-Module -name WebAdministration) {
-        $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
-        # Loop through required MIME types and check if present in IIS
-        foreach ($mime in $RequiredMimeTypes) {
-            if ($IISMimeTypes.value -contains $mime.Extension) {
-                Write-Host ("✓ IIS MIME type for {0} ({1}) is configured." -f $mime.Extension, $mime.Description) -ForegroundColor Green
-            } else {
-                Write-Host ("✗ IIS MIME type for {0} ({1}) is NOT configured." -f $mime.Extension, $mime.Description) -ForegroundColor Red
-                Write-Host "Remediation: Run following Command" -ForegroundColor Yellow
-                Write-Host ("New-WebMimeType -FileExtension '{0}' -MimeType '{1}' -PSPath 'IIS:\Sites\Default Web Site'" -f $mime.Extension, $mime.MimeType) -ForegroundColor DarkGray
-                $IISMimeTypeUpdateRequired = $true
-            }
-        }
-        if ($IISMimeTypeUpdateRequired) {
-            write-host -ForegroundColor Magenta "See this Page for details: https://documentation.2pintsoftware.com/2pxe-server/configuration/iis-and-branchcache-setup-and-config"
-        }
-    }
 }
 #Region Services
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Checking for Services..." -ForegroundColor Cyan
 #Test Services if App Installed
-#Test SQL Express
-$SQLInstances = Get-SqlInstances
-if ($SQLInstances.Count -eq 0) {
-    Write-Host "No SQL Server instances found on this server." -ForegroundColor Red
-    $Global:Installed_Microsoft_SQL_Server = $false
-} else {
-    $SQLServiceName = $SQLInstances.ServiceName
-}
-
-if (($Installed_Microsoft_SQL_Server) -and ($SQLServiceName)){
-    $SQLService = Get-Service -Name $SQLServiceName
-    if ($SQLService.Status -eq 'Running') {
-        Write-Host "Microsoft SQL Server service is running." -ForegroundColor Green
-        Write-Host "  Display Name: $($SQLService.DisplayName)" -ForegroundColor DarkGray
-        Write-Host "  Service Name: $($SQLService.Name)" -ForegroundColor DarkGray
-        Write-Host "  Start Type:   $($SQLService.StartType)" -ForegroundColor DarkGray
-        $Global:SQLServiceRunning = $true
-    }
-    else {
-        Write-Host "Microsoft SQL Server service is NOT running." -ForegroundColor Red
-        Write-Host " Attempting to start service..." -ForegroundColor Yellow
-        Start-Service -Name $SQLServiceName -ErrorAction SilentlyContinue
-        if ($?) {
-            Write-Host "Service started successfully." -ForegroundColor Green
-        }
-        else {
-            Write-Host "Failed to start service." -ForegroundColor Red
-        }
-        $Global:SQLServiceRunning = $false
-    }
-}
 #Test StifleR Service
 if ($Installed_2Pint_Software_StifleR_Server){
     $StifleRService = Get-Service -Name '2Pint Software StifleR Server'
@@ -1334,23 +783,6 @@ if ($Installed_2Pint_Software_StifleR_Server){
     
     
     
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Checking for StifleRDashboard Web Virtual Directory..." -ForegroundColor Cyan
-    
-    try {
-        $vdir = Get-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard"
-    } catch {
-        Write-Host "Error checking for StifleRDashboard Web Virtual Directory: $_" -ForegroundColor Red
-    }
-    if ($vdir) {
-        Write-Host "✓ StifleRDashboard Web Virtual Directory exists in Default Web Site." -ForegroundColor Green
-        Write-Host "  Physical Path: $($vdir.PhysicalPath)" -ForegroundColor DarkGray
-    } else {
-        Write-Host "✗ StifleRDashboard Web Virtual Directory is NOT present in Default Web Site." -ForegroundColor Red
-        Write-Host "Remediation: Run the following command:" -ForegroundColor Yellow
-        Write-Host "New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'" -ForegroundColor DarkGray
-        $IISVirtualDirMissing = $true
-    }
     Write-Host ""
     Write-Host "Confirm BackConnectionHostNames for Dashboard access... (prevent authentication loop)" -ForegroundColor Cyan
     $BackConnectionHostNames = Get-BackConnectionHostNames
@@ -1518,78 +950,6 @@ if ($Installed_2Pint_Software_DeployR){
         }
         write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
-    if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
-        $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
-        if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
-            Write-Host " DeployR SQL Server Instance in Registry matches detected SQL Instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
-        }
-        else {
-            Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
-            Write-Host "     DeployR SQL Server Instance in Registry does NOT match detected SQL Instance." -ForegroundColor Red
-            Write-Host "      Registry Instance: $($DeployRegDataSQLServerInstanceString)" -ForegroundColor DarkGray
-            Write-Host "      Detected Instance: $($SQLInstances.InstanceName)" -ForegroundColor DarkGray
-            Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
-        }
-        Write-Host " Testing DeployR SQL Connection string from Registry... " -ForegroundColor Cyan
-        write-host "  $($DeployRRegData.ConnectionString)"
-        Test-SQLConnection -ConnectionString $DeployRRegData.ConnectionString
-    }
-    #Check SQL Principal Rights for NT AUTHORITY\SYSTEM
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Testing NT AUTHORITY\SYSTEM permissions on local SQL Express..." -ForegroundColor Cyan
-    $out = Test-SystemSqlPermissions -Instance $SQLInstances.ConnectionString
-    if ($out.Error) {
-        Write-Host "Error: $($out.Error)" -ForegroundColor Red
-        Write-Host "Please Manually Check Permissions on Database Instances" -ForegroundColor Cyan
-        Write-Host "Would you like to try to automatically add SYSTEM to the Instance $($SQLInstances.InstanceName)  (Y/N): " -ForegroundColor Yellow -NoNewline
-        $response = Read-Host
-        if ($response -eq 'Y' -or $response -eq 'y') {
-            try {
-                $SetSQLPerm = Set-SqlServerPermissions -InstanceName $($SQLInstances.InstanceName)
-            }
-            catch {
-                Write-Host "Failed to set permissions: $_" -ForegroundColor Red
-            }
-        }
-    }
-    else {
-        Write-Host "Instance: $($out.Instance)" -ForegroundColor Green
-        Write-Host "  LoginExists: $($out.LoginExists)" -ForegroundColor ($(if ($out.LoginExists) {'Green'} else {'Red'}))
-        Write-Host "  IsSysadmin : $($out.IsSysadmin)" -ForegroundColor ($(if ($out.IsSysadmin) {'Green'} else {'Yellow'}))
-        Write-Host "  IsDbCreator: $($out.IsDbCreator)" -ForegroundColor ($(if ($out.IsDbCreator) {'Green'} else {'Yellow'}))
-    }
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Checking NT AUTHORITY\SYSTEM db_owner permissions for all databases..." -ForegroundColor Cyan
-    $dbOut = Test-SqlDatabases -Instance $SQLInstances.ConnectionString
-    if ($dbOut.Error) {
-        Write-Host "Error: Cannot check permissions - failed to get database list" -ForegroundColor Red
-    }
-    elseif ($dbOut.Databases.Count -eq 0) {
-        Write-Host "No user databases found to check" -ForegroundColor Yellow
-    }
-    else {
-        # Extract database names and check permissions
-        $dbNames = $dbOut.Databases | ForEach-Object { $_.Name }
-        $dbOwnerOut = Test-SystemDatabaseOwnership -Instance $SQLInstances.ConnectionString -DatabaseNames $dbNames
-        
-        if ($dbOwnerOut.Error) {
-            Write-Host "Error: $($dbOwnerOut.Error)" -ForegroundColor Red
-        }
-        else {
-            Write-Host "Instance: $($dbOwnerOut.Instance)" -ForegroundColor Green
-            foreach ($dbPerm in $dbOwnerOut.DatabasePermissions) {
-                if (-not $dbPerm.DbExists) {
-                    Write-Host "  Database '$($dbPerm.SearchName)': DATABASE NOT FOUND" -ForegroundColor Red
-                }
-                else {
-                    $color = if ($dbPerm.HasDbOwner) {'Green'} else {'Red'}
-                    $status = if ($dbPerm.HasDbOwner) {'HAS db_owner'} else {'MISSING db_owner'}
-                    Write-Host "  Database '$($dbPerm.ActualDbName)': $status" -ForegroundColor $color
-                }
-            }
-        }
-    }
-    
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Testing DeployR Certificate..." -ForegroundColor Cyan
     #Test Certificate
@@ -1620,10 +980,6 @@ if ($Installed_2Pint_Software_DeployR){
     $StifleRTest = Test-Url -Url $StifleRServerURL
     if ($StifleRTest) {
         Write-Host "StifleR Server URL is accessible." -ForegroundColor Green
-        $Test443 = Test-NetConnection -ComputerName $StifleRServerName -Port 443
-        if ($Test443) {
-            Write-Host "StifleR Server Port 443 is accessible." -ForegroundColor Green
-        }
         $Test9000 = Test-NetConnection -ComputerName $StifleRServerName -Port 9000
         if ($Test9000) {
             Write-Host "StifleR Server Port 9000 is accessible." -ForegroundColor Green
@@ -1653,34 +1009,7 @@ if ($Installed_2Pint_Software_DeployR){
     
 }
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Magenta
-# Get the certificate hash from the HTTP.SYS binding for port 443
-$certHash = $Null
-$certHash = netsh http show sslcert ipport=0.0.0.0:443 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-
-if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 443): $certHash" -ForegroundColor Cyan
-    if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
-    }
-    else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
-    }
-} else {
-    Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
-    # Fallback: Scan common IPs (adjust as needed)
-    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
-    $found = $false
-    foreach ($ip in $ips) {
-        $hash = netsh http show sslcert ipport="$ip`:443" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-        if ($hash) {
-            Write-Host "Certificate Thumbprint for HTTPS (port 443) on $ip`: $hash" -ForegroundColor Yellow
-            $found = $true
-            break
-        }
-    }
-    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
-}
+write-host "Checking Certificate... on Ports 9000 & 8050" -ForegroundColor Magenta
 $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
@@ -1728,51 +1057,6 @@ if ($certHash) {
     if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
 }
 
-if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
-    $iPXEWSRegPath = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'
-    if (Test-Path -Path $iPXEWSRegPath) {
-        $iPXEWSRegData = Get-ItemProperty -Path $iPXEWSRegPath
-        if ($iPXEWSRegData.ConnectionString) {
-            Write-Host "iPXE WS SQL Connection String from Registry: $($iPXEWSRegData.ConnectionString)" -ForegroundColor Cyan
-            Test-SQLConnection -ConnectionString $iPXEWSRegData.ConnectionString
-        }
-        else {
-            Write-Host "iPXE WS SQL Connection String is NOT configured in Registry." -ForegroundColor Red
-        }
-    }
-    $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-    if ($iPXEcertHash) {
-        Write-Host  "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
-        
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $iPXEcertHash }
-        if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
-        }
-        else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
-        }
-    }
-    
-} else {
-    Write-Host  "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
-    # Fallback: Scan common IPs (adjust as needed)
-    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
-    $found = $false
-    foreach ($ip in $ips) {
-        $hash = netsh http show sslcert ipport="$ip`:8051" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-        if ($hash) {
-            Write-Host "Certificate Thumbprint for HTTPS (port 8051) on $ip`: $hash" -ForegroundColor Yellow
-            $found = $true
-            break
-        }
-    }
-    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
-    
-}
-
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
     $2PXEcertHash = netsh http show sslcert ipport=0.0.0.0:8050 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     $2PXEConfigFilePath = "C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config"
@@ -1806,38 +1090,6 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
         if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
     }
 }
-if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true)){
-    
-    if ($2PXEcertHash -eq $iPXEcertHash) {
-        Write-Host "The certificate hash matches (2PXE & iPXE WS)." -ForegroundColor Green
-    }
-    else {
-        Write-Host "The certificate hashes are different between 2PXE & iPXE WS." -ForegroundColor Red
-    }
-    if (Test-Path -Path $2PXEConfigFilePath) {
-        Write-Host "------------------------------------" -ForegroundColor DarkGray
-        Write-Host "Checking Settings in 2PXE config file: $2PXEConfigFilePath" -ForegroundColor Cyan
-        $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
-        $2PXEConfigiPXEAnywhereWebServiceURI = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "iPXEAnywhereWebServiceURI" } | Select-Object -ExpandProperty value
-        if ($2PXEConfigiPXEAnywhereWebServiceURI) {
-            if ($DeployRURL){
-                if ($2PXEConfigiPXEAnywhereWebServiceURI -match $DeployRURL) {
-                    Write-Host "iPXEAnywhereWebServiceURI in 2PXE config matches DeployR Server URL." -ForegroundColor Green
-                    Write-Host " iPXEAnywhereWebServiceURI from 2PXE config file: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
-                }
-                else {
-                    Write-Host "iPXEAnywhereWebServiceURI in 2PXE config does NOT match DeployR Server URL." -ForegroundColor Red
-                    Write-Host "  iPXEAnywhereWebServiceURI: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
-                    Write-Host "  DeployR Server URL: $DeployRURL" -ForegroundColor DarkGray
-                }
-            }
-        }
-        else{
-            Write-Host "2PXE Config Missing Value for iPXEAnywhereWebServiceURI" -ForegroundColor Red
-        }
-    }
-    
-}
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
     if (Test-Path -Path $2PXEConfigFilePath) {
         $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
@@ -1869,77 +1121,6 @@ foreach ($FirewallRule in $FirewallRules){
         Write-Host "No matching ports found for Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor Red
     }
 }
-#Check StifleR Infrastructure Approval for DeployR if StifleR Wmi Agent is installed
-if ($Installed_2Pint_Software_StifleR_WmiAgent) {
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    write-host "Checking for StifleR Infrastructure Approval for DeployR" -ForegroundColor Cyan
-    $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-    try {
-        if ($InfraServices) {
-            Write-Host "StifleR Infrastructure Services found." -ForegroundColor Green
-        } else {
-            Write-Host "No StifleR Infrastructure Services found." -ForegroundColor Red
-        }
-    } catch {
-        Write-Host "Failed to retrieve StifleR Infrastructure Services." -ForegroundColor Red
-        write-host "Waiting for a minute and going to try again..."
-        Start-Sleep -seconds 10
-        write-host " 50..."
-        Start-Sleep -seconds 10
-        write-Host " 40..."
-        Start-Sleep -seconds 10
-        write-host " 30..."
-        Start-Sleep -seconds 10
-        write-host " 20..."
-        Start-Sleep -seconds 10
-        write-host " 10..."
-        Start-Sleep -seconds 10
-        try {
-            $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        }
-        catch {
-            Write-Host "Error occurred while retrieving StifleR Infrastructure Services." -ForegroundColor Red
-        }
-    }
-    if (!$InfraServices) {
-        
-        Write-Host "Sometimes if the service just started, this can take a bit"
-        write-host "Waiting for a minute and going to try again..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 50..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-Host " 40..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 30..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 20..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 10..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-    }
-    if ($InfraServices) {
-        $DeployR = $InfraServices | Where-Object {$_.Type -eq "DeployR"}
-        if ($DeployR){
-            Write-Host "StifleR Infrastructure for DeployR found." -ForegroundColor Green
-            if ($DeployR.Status -eq "IsApproved") {
-                Write-Host "DeployR Status: Approved" -ForegroundColor Green
-            } else {
-                Write-Host "DeployR Status: NOT Approved" -ForegroundColor Red
-            }
-        }
-        else{
-            Write-Host "No StifleR Infrastructure for DeployR found." -ForegroundColor Red
-        }
-    } else {
-        Write-Host "StifleR Infrastructure Services are NOT available." -ForegroundColor Red
-    }
-}
 #Remediation 
 #prompt user to do installs
 Write-Host "=========================================================================" -ForegroundColor DarkGray
@@ -1953,42 +1134,6 @@ if ($MissingComponents) {
         Write-Host "Add-WindowsFeature $($MissingComponents -join ', ')" -ForegroundColor DarkGray
     }
 }
-if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
-    if ($IISVirtualDirMissing) {
-        Write-Host "=========================================================================" -ForegroundColor DarkGray
-        Write-Host "Running Remediation for StifleRDashboard virtual directory"
-        if (Test-Path -path "C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files"){
-            Write-Host "✓ StifleRDashboard directory exists." -ForegroundColor Green
-        } else {
-            Write-Host "✗ StifleRDashboard directory is missing." -ForegroundColor Red
-        }
-        Write-Host "Would you like to create the StifleRDashboard virtual directory now? (Y/N): " -ForegroundColor Yellow -NoNewline
-        $response = Read-Host
-        if ($response -eq 'Y' -or $response -eq 'y') {
-            try {
-                New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files' -ErrorAction Stop
-                Write-Host "✓ StifleRDashboard virtual directory created successfully." -ForegroundColor Green
-            } catch {
-                Write-Host "✗ Failed to create virtual directory: $_" -ForegroundColor Red
-                Write-Host "Please run the command manually with elevated permissions." -ForegroundColor Yellow
-            }
-        } else {
-            Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
-        }
-    }
-}
-if ($IISMimeTypeUpdateRequired) {
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Based on what you're doing, IIS is optional, and some MIME types are optional" -ForegroundColor Yellow
-    Write-Host "Since I don't know what you plan to do, this script offers you the option of enabling them all automatically" -ForegroundColor Yellow
-    Write-Host "Would you like to add the missing IIS MIME types now? (Y/N): " -ForegroundColor Yellow -NoNewline
-    $response = Read-Host
-    if ($response -eq 'Y' -or $response -eq 'y') {
-        Set-IISMIMETypes
-        Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
-    }
-}
-
 Stop-Transcript
 Write-Host ""
 Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
