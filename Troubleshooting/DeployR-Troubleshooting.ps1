@@ -44,6 +44,7 @@ Change Log
 - 2026.06.26 - Added check for 2Pint API URL https://api.service.2pintsoftware.com
 - 2026.06.26 - Updated Min version for PS and .Net to 7.6.3 and 10.0.3 respectively for DeployR 1.3 Pre-Reqs
 - 2026.07.02 - Updated to do better match on the ADK
+- 2026.07.06 - Updated to disable remediation prompt for MIME Types and IIS Virtual Directories, as they are optional for DeployR.
 
 To DO
 - Add if Statements for SQL Permissions checks and remediation, first check connection string to get instance name
@@ -1117,6 +1118,19 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
     Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, then most of these will be needed." -ForegroundColor Yellow
+    try {
+        Import-Module WebAdministration -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
+    }
+    catch {
+        write-host "Catch block executed"
+    }
+
+    $vdirForMimeCheck = $null
+    if (Get-Module -Name WebAdministration) {
+        $vdirForMimeCheck = Get-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard" -ErrorAction SilentlyContinue
+    }
+
+    if ($vdirForMimeCheck) {
     # Table of required MIME types for iPXE and related boot files
     $RequiredMimeTypes = @(
     [PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
@@ -1134,13 +1148,7 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
     [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
     [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
     )
-    try {
-        Import-Module WebAdministration -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
-    }
-    catch {
-        write-host "Catch block executed"
-    }
-    
+
     if (Get-Module -name WebAdministration) {
         $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
         # Loop through required MIME types and check if present in IIS
@@ -1157,6 +1165,10 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
         if ($IISMimeTypeUpdateRequired) {
             write-host -ForegroundColor Magenta "See this Page for details: https://documentation.2pintsoftware.com/2pxe-server/configuration/iis-and-branchcache-setup-and-config"
         }
+    }
+    }
+    else {
+        Write-Host "Skipping IIS MIME type checks because StifleRDashboard virtual directory is not present." -ForegroundColor DarkGray
     }
 }
 #Region Services
@@ -1961,6 +1973,7 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
         } else {
             Write-Host "✗ StifleRDashboard directory is missing." -ForegroundColor Red
         }
+        <#
         Write-Host "Would you like to create the StifleRDashboard virtual directory now? (Y/N): " -ForegroundColor Yellow -NoNewline
         $response = Read-Host
         if ($response -eq 'Y' -or $response -eq 'y') {
@@ -1974,18 +1987,23 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
         } else {
             Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
         }
+        #>
+        Write-Host "Skipping virtual directory remediation prompt (temporarily disabled)." -ForegroundColor DarkGray
     }
 }
 if ($IISMimeTypeUpdateRequired) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Based on what you're doing, IIS is optional, and some MIME types are optional" -ForegroundColor Yellow
     Write-Host "Since I don't know what you plan to do, this script offers you the option of enabling them all automatically" -ForegroundColor Yellow
+    <#
     Write-Host "Would you like to add the missing IIS MIME types now? (Y/N): " -ForegroundColor Yellow -NoNewline
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
         Set-IISMIMETypes
         Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
     }
+    #>
+    Write-Host "Skipping IIS MIME type remediation prompt (temporarily disabled)." -ForegroundColor DarkGray
 }
 
 Stop-Transcript
