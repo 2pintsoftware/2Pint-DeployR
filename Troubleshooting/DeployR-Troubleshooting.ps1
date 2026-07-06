@@ -1205,7 +1205,7 @@ if ($Installed_2Pint_Software_StifleR_Server){
         $Global:StifleRServiceRunning = $true
     }
     else {
-        Write-Host "2Pint StifleR Server service is NOT running." -ForegroundColor Red
+        Write-Host "WARNING: 2Pint StifleR Server service is NOT running." -ForegroundColor Red
         Write-Host " Attempting to start service..." -ForegroundColor Yellow
         Start-Service -Name '2Pint Software StifleR Server' -ErrorAction SilentlyContinue
         if ($?) {
