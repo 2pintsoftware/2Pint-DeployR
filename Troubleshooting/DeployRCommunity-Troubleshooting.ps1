@@ -16,6 +16,7 @@ USE POWERSHELL 7.  This doesn't work properly from PowerShell 5 Terminal.
 Change Log
 - 26.07.26 - Started with DeployR Troubleshooting Script and modified for Community
 
+#>
 
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
 
