@@ -94,7 +94,7 @@ function Get-ManufacturerFromName {
 function Add-TagToContentItem {
     <#
     .SYNOPSIS
-    Adds a tag to a DeployR content item.
+    Adds a tag to a DeployR content item and all its versions.
     
     .PARAMETER ContentItemId
     The ID of the content item to tag.
@@ -103,7 +103,7 @@ function Add-TagToContentItem {
     The name of the content item (for logging).
     
     .PARAMETER Tag
-    The tag to add to the content item.
+    The tag to add to the content item and its versions.
     #>
     param(
         [string]$ContentItemId,
@@ -119,6 +119,9 @@ function Add-TagToContentItem {
             return $false
         }
         
+        $tagAdded = $false
+        
+        # Update tags on the content item itself
         $currentTags = $contentItem.tags
         
         if ($null -eq $currentTags) {
@@ -128,13 +131,35 @@ function Add-TagToContentItem {
         if ($Tag -notin $currentTags) {
             $contentItem.tags += $Tag
             $null = Set-DeployRMetadata -Type ContentItem -Object $contentItem
-            Write-Host "  ✓ Added tag '$Tag' to: $ContentItemName" -ForegroundColor Green
-            return $true
+            Write-Host "  ✓ Added tag '$Tag' to content item: $ContentItemName" -ForegroundColor Green
+            $tagAdded = $true
         }
         else {
-            Write-Host "  ○ Tag '$Tag' already exists on: $ContentItemName" -ForegroundColor Cyan
-            return $false
+            Write-Host "  ○ Tag '$Tag' already exists on content item: $ContentItemName" -ForegroundColor Cyan
         }
+        
+        # Update tags on all versions of the content item
+        if ($null -ne $contentItem.versions -and $contentItem.versions.Count -gt 0) {
+            foreach ($version in $contentItem.versions) {
+                $versionTags = $version.tags
+                
+                if ($null -eq $versionTags) {
+                    $versionTags = @()
+                }
+                
+                if ($Tag -notin $versionTags) {
+                    $version.tags += $Tag
+                    $null = Set-DeployRMetadata -Type ContentItemVersion -Object $version
+                    Write-Host "  ✓ Added tag '$Tag' to version $($version.versionNo): $ContentItemName" -ForegroundColor Green
+                    $tagAdded = $true
+                }
+                else {
+                    Write-Host "  ○ Tag '$Tag' already exists on version $($version.versionNo): $ContentItemName" -ForegroundColor Cyan
+                }
+            }
+        }
+        
+        return $tagAdded
     }
     catch {
         Write-Error "  ✗ Failed to add tag to $ContentItemName : $_"
