@@ -9,6 +9,7 @@ Change Log
 - 2026.03.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
 - 2026.04.03 - Added check for default Content location.
 - 2026.06.22 - Added grabbing the 2PXE Service Config file if it exists
+- 2026.07.14 - Added grabbing the pPplication and System event logs
 #>
 
 
@@ -231,6 +232,18 @@ if (Test-Path -Path $iPXEWSRegPath) {
 
 #Get StifleR Event Logs (in case there are some that don't have DeployR in the name)
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*StifleR*"
+
+#Export Windows Application and System logs
+foreach ($windowsLog in @("Application", "System")) {
+    $evtxFilePath = Join-Path -Path "$TempFolder\EventLogs" -ChildPath "$windowsLog.evtx"
+    try {
+        Start-Process wevtutil.exe -ArgumentList "export-log `"$windowsLog`" `"$evtxFilePath`"" -NoNewWindow -Wait -ErrorAction Stop
+        Write-Host "  Exported: $windowsLog.evtx" -ForegroundColor Gray
+    }
+    catch {
+        Write-Warning "  Failed to export: $windowsLog - $_"
+    }
+}
 Write-Host "Event log export complete!" -ForegroundColor Green
 
 #Compress the logs into a zip file (with time stamp)
