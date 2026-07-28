@@ -204,6 +204,92 @@ Get-ChildItem -Path $2PintRegPath -Recurse | Out-File -FilePath "$TempFolder\2Pi
 $ComputerInfo = Get-ComputerInfo
 $ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 
+#Get Cert Information
+$AllLocalCerts = Get-ChildItem -Path Cert:\LocalMachine\My
+
+$ExcludedCertProperties = @(
+    'PrivateKey',
+    'RawData',
+    'RawDataMemory',
+    'PSDrive',
+    'PSPath',
+    'PSProvider',
+    'PSIsContainer',
+    'EnrollmentPolicyEndPoint',
+    'EnrollmentServerEndpoint'
+)
+
+$FilteredLocalCerts = foreach ($Cert in $AllLocalCerts) {
+    $SelectedCert = $Cert | Select-Object * -ExcludeProperty $ExcludedCertProperties
+    $FriendlyCertProperties = [ordered]@{}
+
+    foreach ($Property in $SelectedCert.PSObject.Properties) {
+        $FriendlyValue = $Property.Value
+
+        switch ($Property.Name) {
+            'IssuerName' {
+                if ($null -ne $Property.Value) {
+                    $FriendlyValue = $Property.Value.Name
+                }
+            }
+            'SubjectName' {
+                if ($null -ne $Property.Value) {
+                    $FriendlyValue = $Property.Value.Name
+                }
+            }
+            'SignatureAlgorithm' {
+                if ($null -ne $Property.Value) {
+                    if ($Property.Value.FriendlyName -and $Property.Value.Value) {
+                        $FriendlyValue = "$($Property.Value.FriendlyName) ($($Property.Value.Value))"
+                    }
+                    elseif ($Property.Value.FriendlyName) {
+                        $FriendlyValue = $Property.Value.FriendlyName
+                    }
+                    else {
+                        $FriendlyValue = $Property.Value.Value
+                    }
+                }
+            }
+            'Extensions' {
+                if ($null -ne $Property.Value) {
+                    $FriendlyValue = @(
+                        foreach ($Extension in $Property.Value) {
+                            if ($null -ne $Extension.Oid) {
+                                if ($Extension.Oid.FriendlyName -and $Extension.Oid.Value) {
+                                    "$($Extension.Oid.FriendlyName) ($($Extension.Oid.Value))"
+                                }
+                                elseif ($Extension.Oid.Value) {
+                                    $Extension.Oid.Value
+                                }
+                                else {
+                                    $Extension.Oid.FriendlyName
+                                }
+                            }
+                            else {
+                                $Extension.GetType().Name
+                            }
+                        }
+                    ) -join '; '
+                }
+            }
+        }
+
+        $FriendlyCertProperties[$Property.Name] = $FriendlyValue
+    }
+
+    [pscustomobject]$FriendlyCertProperties
+}
+
+$CertInfoPath = "$TempFolder\CertInfo.txt"
+"" | Out-File -FilePath $CertInfoPath -Force
+for ($i = 0; $i -lt $FilteredLocalCerts.Count; $i++) {
+    $FilteredLocalCerts[$i] | Format-List * | Out-File -FilePath $CertInfoPath -Append -Force
+    if ($i -lt ($FilteredLocalCerts.Count - 1)) {
+        "--------------------------------------------" | Out-File -FilePath $CertInfoPath -Append -Force
+    }
+}
+
+
 #Get DeployR Event Logs
 Find-EventLogs -Export -OutputDirectory "$TempFolder\EventLogs" -LogNameFilter "*DeployR*"
 

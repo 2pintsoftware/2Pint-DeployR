@@ -867,6 +867,10 @@ Write-Host "====================================================================
 $LogApps = Get-InstalledApps
 $LogApps | ForEach-Object { $_; "----------------------------------------------------" }| Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 
+#Trigger WMI for Infra Services, sometimes takes awhile for it to "wake up"
+try {$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue}
+catch {}
+
 #Test if Applications are installed
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
 $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "SDK"}
@@ -1885,32 +1889,10 @@ if ($Installed_2Pint_Software_StifleR_WmiAgent) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     write-host "Checking for StifleR Infrastructure Approval for DeployR" -ForegroundColor Cyan
     $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-    try {
-        if ($InfraServices) {
-            Write-Host "StifleR Infrastructure Services found." -ForegroundColor Green
-        } else {
-            Write-Host "No StifleR Infrastructure Services found." -ForegroundColor Red
-        }
-    } catch {
-        Write-Host "Failed to retrieve StifleR Infrastructure Services." -ForegroundColor Red
-        write-host "Waiting for a minute and going to try again..."
-        Start-Sleep -seconds 10
-        write-host " 50..."
-        Start-Sleep -seconds 10
-        write-Host " 40..."
-        Start-Sleep -seconds 10
-        write-host " 30..."
-        Start-Sleep -seconds 10
-        write-host " 20..."
-        Start-Sleep -seconds 10
-        write-host " 10..."
-        Start-Sleep -seconds 10
-        try {
-            $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        }
-        catch {
-            Write-Host "Error occurred while retrieving StifleR Infrastructure Services." -ForegroundColor Red
-        }
+    if ($InfraServices) {
+        Write-Host "StifleR Infrastructure Services found." -ForegroundColor Green
+    } else {
+        Write-Host "No StifleR Infrastructure Services found." -ForegroundColor Red
     }
     if (!$InfraServices) {
         
