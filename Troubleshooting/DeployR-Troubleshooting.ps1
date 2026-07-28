@@ -45,6 +45,10 @@ Change Log
 - 2026.06.26 - Updated Min version for PS and .Net to 7.6.3 and 10.0.3 respectively for DeployR 1.3 Pre-Reqs
 - 2026.07.02 - Updated to do better match on the ADK
 - 2026.07.06 - Updated to disable remediation prompt for MIME Types and IIS Virtual Directories, as they are optional for DeployR.
+- 2026.07.28 - Added More info about Certs being used in 2PXE and confirms the CustomCAThumbprint if used
+- 2026.07.28 - Modified process to detect if DeployR is Approved in Infra Services
+- 2026.07.28 - Added Check for Latest versions of DeployR & StifleR installed based on releases.2pintsoftware.com
+
 
 To DO
 - Add if Statements for SQL Permissions checks and remediation, first check connection string to get instance name
@@ -95,7 +99,296 @@ $FirewallRules = @(
 )
 
 #region Functions
+function Get-UpdatedVersions
+{
+    $releaseDefinitions = @(
+        [pscustomobject]@{
+            DisplayName    = 'DeployR'
+            Uri            = 'https://releases.2pintsoftware.com/deployr/release.json'
+            Pattern        = '(?i)DeployR(?!\s*Community)'
+            ExcludePreview  = $false
+        },
+        [pscustomobject]@{
+            DisplayName    = 'DeployR Community'
+            Uri            = 'https://releases.2pintsoftware.com/deployrcommunity/release.json'
+            Pattern        = '(?i)DeployR\s*Community|DeployRCommunity'
+            ExcludePreview  = $false
+        },
+        [pscustomobject]@{
+            DisplayName    = 'StifleR Server'
+            Uri            = 'https://releases.2pintsoftware.com/stifler/release.json'
+            Pattern        = '(?i)StifleR Server'
+            ExcludePreview  = $true
+        }
+    )
 
+    $installedApps = Get-InstalledApps
+
+    foreach ($definition in $releaseDefinitions) {
+        $releaseInfo = Get-ReleaseInfo -Uri $definition.Uri -DisplayName $definition.DisplayName -ExcludePreview:($definition.ExcludePreview)
+        $releaseInfoAny = Get-ReleaseInfo -Uri $definition.Uri -DisplayName $definition.DisplayName
+        $releasePreview = Get-ReleaseInfo -Uri $definition.Uri -DisplayName $definition.DisplayName -PreviewOnly
+        $installedInfo = Get-LatestInstalledApp -InstalledApps $installedApps -Pattern $definition.Pattern -DisplayName $definition.DisplayName
+
+        $latestVersionObject = ConvertTo-VersionObject $releaseInfo.LatestVersion
+        $latestAnyVersionObject = ConvertTo-VersionObject $releaseInfoAny.LatestVersion
+        $installedVersionObject = $installedInfo.InstalledVersionObject
+        $installedChannel = Get-VersionChannel -Version $installedInfo.InstalledVersion
+        $latestStableChannel = Get-VersionChannel -Version $releaseInfo.LatestVersion
+        $latestAnyChannel = Get-VersionChannel -Version $releaseInfoAny.LatestVersion
+
+        $updateAvailable = $false
+        $upgradeAvailable = $false
+
+        if ($installedInfo.Found -and $installedVersionObject -and $latestVersionObject) {
+            if ($installedChannel -eq $latestStableChannel) {
+                $updateAvailable = $installedVersionObject -lt $latestVersionObject
+            }
+            elseif ($installedVersionObject -lt $latestVersionObject) {
+                $upgradeAvailable = $true
+            }
+        }
+
+        if ($installedInfo.Found -and $installedVersionObject -and $latestAnyVersionObject) {
+            if ($installedVersionObject -lt $latestAnyVersionObject) {
+                if ($installedChannel -eq $latestAnyChannel) {
+                    $updateAvailable = $true
+                }
+                else {
+                    $upgradeAvailable = $true
+                }
+            }
+        }
+
+        $stableStatus = if (-not $installedInfo.Found) {
+            'Not Installed'
+        }
+        elseif ($installedInfo.Found -and $installedVersionObject -and $latestVersionObject -and $installedVersionObject -lt $latestVersionObject) {
+            if ($installedChannel -eq $latestStableChannel) {
+                'Update Available'
+            }
+            else {
+                'Upgrade Available'
+            }
+        }
+        else {
+            'Up To Date'
+        }
+
+        $overallStatus = if (-not $installedInfo.Found) {
+            'Not Installed'
+        }
+        elseif ($updateAvailable -and $upgradeAvailable) {
+            'Update and Upgrade Available'
+        }
+        elseif ($upgradeAvailable) {
+            'Upgrade Available'
+        }
+        elseif ($updateAvailable) {
+            'Update Available'
+        }
+        else {
+            'Up To Date'
+        }
+
+        [pscustomobject]@{
+            Product             = $definition.DisplayName
+            Installed           = $installedInfo.Found
+            InstalledVersion    = $installedInfo.InstalledVersion
+            CurrentChannel      = $installedChannel
+            LatestVersion       = $releaseInfo.LatestVersion
+            LatestChannel       = $releaseInfo.LatestChannel
+            LatestTimestamp     = $releaseInfo.LatestTimestamp
+            LatestAvailableVersion = $releaseInfoAny.LatestVersion
+            LatestAvailableChannel = $releaseInfoAny.LatestChannel
+            LatestAvailableIsPreview = $releaseInfoAny.IsPreview
+            PreviewVersion      = $releasePreview.LatestVersion
+            PreviewChannel      = $releasePreview.LatestChannel
+            UpdateAvailable     = $updateAvailable
+            UpgradeAvailable    = $upgradeAvailable
+            StableStatus        = $stableStatus
+            Status              = $overallStatus
+            DownloadUrl         = $releaseInfo.DownloadUrl
+            ReleaseArtifact     = $releaseInfo.ArtifactName
+            LatestAvailableDownloadUrl = $releaseInfoAny.DownloadUrl
+            SourceUrl           = $releaseInfo.SourceUrl
+            InstalledDisplayName = $installedInfo.InstalledName
+            InstalledInstallDate = $installedInfo.InstallDate
+        }
+    }
+}
+
+function ConvertTo-VersionObject
+{
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $null
+    }
+
+    $versionText = [regex]::Match($Value, '\d+(?:\.\d+){1,3}').Value
+    if ([string]::IsNullOrWhiteSpace($versionText)) {
+        $versionText = $Value.Trim()
+    }
+
+    try {
+        return [version]$versionText
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-VersionChannel
+{
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Version
+    )
+
+    $parsedVersion = ConvertTo-VersionObject -Value $Version
+    if (-not $parsedVersion) {
+        return $null
+    }
+
+    return '{0}.{1}' -f $parsedVersion.Major, $parsedVersion.Minor
+}
+
+function Get-ReleaseInfo
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ExcludePreview,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$PreviewOnly
+    )
+
+    $release = Invoke-RestMethod -Uri $Uri -Method Get -ErrorAction Stop
+    $channels = foreach ($channel in $release.channels.PSObject.Properties) {
+        [pscustomobject]@{
+            Channel      = $channel.Name
+            Version      = $channel.Value.version
+            Timestamp    = $channel.Value.timestamp
+            BuildId      = $channel.Value.build_id
+            Commit       = $channel.Value.commit
+            IsPreview    = ($channel.Name -match 'preview')
+            ArtifactName = ($channel.Value.artifacts.PSObject.Properties | Select-Object -First 1).Name
+            ArtifactPath = ($channel.Value.artifacts.PSObject.Properties | Select-Object -First 1).Value
+            Checksums    = $channel.Value.checksums
+        }
+    }
+
+    if ($ExcludePreview) {
+        $channels = $channels | Where-Object { $_.Channel -notmatch 'preview' }
+    }
+
+    if ($PreviewOnly) {
+        $channels = $channels | Where-Object { $_.Channel -match 'preview' }
+    }
+
+    if (-not $channels) {
+        return [pscustomobject]@{
+            ProductName     = $DisplayName
+            ProductId       = $release.product
+            SourceUrl       = $Uri
+            LatestVersion   = $null
+            LatestChannel   = $null
+            LatestTimestamp = $null
+            BuildId         = $null
+            Commit          = $null
+            IsPreview       = $false
+            ArtifactName    = $null
+            ArtifactPath    = $null
+            DownloadUrl     = $null
+            Checksums       = $null
+        }
+    }
+
+    $latestChannel = $channels |
+        Where-Object { ConvertTo-VersionObject $_.Version } |
+        Sort-Object -Property @{ Expression = { ConvertTo-VersionObject $_.Version } }, @{ Expression = { $_.Timestamp } } -Descending |
+        Select-Object -First 1
+
+    if (-not $latestChannel) {
+        $latestChannel = $channels | Sort-Object Channel -Descending | Select-Object -First 1
+    }
+
+    [pscustomobject]@{
+        ProductName     = $DisplayName
+        ProductId       = $release.product
+        SourceUrl       = $Uri
+        LatestVersion   = $latestChannel.Version
+        LatestChannel   = $latestChannel.Channel
+        LatestTimestamp = $latestChannel.Timestamp
+        BuildId         = $latestChannel.BuildId
+        Commit          = $latestChannel.Commit
+        IsPreview       = $latestChannel.IsPreview
+        ArtifactName    = $latestChannel.ArtifactName
+        ArtifactPath    = $latestChannel.ArtifactPath
+        DownloadUrl     = if ($latestChannel.ArtifactPath) { 'https://releases.2pintsoftware.com/' + $latestChannel.ArtifactPath } else { $null }
+        Checksums       = $latestChannel.Checksums
+    }
+}
+
+function Get-LatestInstalledApp
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$InstalledApps,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Pattern,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $matches = $InstalledApps | Where-Object { $_.DisplayName -match $Pattern }
+    if (-not $matches) {
+        return [pscustomobject]@{
+            Found                 = $false
+            DisplayName           = $DisplayName
+            InstalledName         = $null
+            InstalledVersion      = $null
+            InstalledVersionObject = $null
+            InstallDate           = $null
+        }
+    }
+
+    $candidates = foreach ($match in $matches) {
+        [pscustomobject]@{
+            DisplayName    = $match.DisplayName
+            DisplayVersion = $match.DisplayVersion
+            VersionObject  = ConvertTo-VersionObject $match.DisplayVersion
+            InstallDate    = $match.InstallDate
+            Publisher      = $match.Publisher
+            InstallLocation = $match.InstallLocation
+        }
+    }
+
+    $installed = $candidates |
+        Sort-Object -Property @{ Expression = { if ($_.VersionObject) { $_.VersionObject } else { [version]'0.0.0.0' } } }, @{ Expression = { $_.InstallDate } } -Descending |
+        Select-Object -First 1
+
+    return [pscustomobject]@{
+        Found                 = $true
+        DisplayName           = $DisplayName
+        InstalledName         = $installed.DisplayName
+        InstalledVersion      = $installed.DisplayVersion
+        InstalledVersionObject = $installed.VersionObject
+        InstallDate           = $installed.InstallDate
+    }
+}
 function Test-CertificateChain {
     <#
     .SYNOPSIS
@@ -867,9 +1160,15 @@ Write-Host "====================================================================
 $LogApps = Get-InstalledApps
 $LogApps | ForEach-Object { $_; "----------------------------------------------------" }| Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 
-#Trigger WMI for Infra Services, sometimes takes awhile for it to "wake up"
-try {$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue}
-catch {}
+#Get Latest Versions of 2Pint Software
+try {
+    $LatestVersions = Get-UpdatedVersions
+}
+catch {
+    #Write-Warning "Failed to retrieve latest versions of 2Pint Software. Error: $_"
+    #$LatestVersions = @()
+}
+
 
 #Test if Applications are installed
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
@@ -973,6 +1272,12 @@ ForEach-Object {
 foreach ($app in $PreReqAppsStatus) {
     
     if ($app.Installed) {
+        if ($app.Title -match "2Pint Software StifleR Server"){
+            $2PintStifleRServerInstallDetails = $app
+        }
+        if ($app.Title -match "2Pint Software DeployR"){
+            $2PintDeployRInstallDetails = $app
+        }
         if ($app.MinVersion -and $app.Version -and ([version]$app.Version -lt [version]$app.MinVersion)) {
             Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
             Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
@@ -1089,6 +1394,27 @@ if ($MissingApps) {
     #return
 }
 
+if ($Installed_2Pint_Software_StifleR_Server){
+    #Write The Current Installed Version of StifleR Server 
+    Write-Host "StifleR Server Installed Version: $($2PintStifleRServerInstallDetails.Version)" -ForegroundColor Cyan
+    if ($LatestVersions){
+        $LatestStifleRVersion = $LatestVersions | Where-Object { $_.Product -match "StifleR Server" } | Select-Object -First 1
+        if ($LatestStifleRVersion) {
+            Write-Host " Latest StifleR Server Version: $($LatestStifleRVersion.LatestAvailableVersion)" -ForegroundColor Cyan
+            Write-Host "  Status: $($LatestStifleRVersion.Status)" -ForegroundColor DarkGray
+        }
+    }
+}
+if ($Installed_2Pint_Software_DeployR){
+    Write-Host "DeployR Installed Version: $($2PintDeployRInstallDetails.Version)" -ForegroundColor Cyan
+    if ($LatestVersions){
+        $LatestDeployRVersion = $LatestVersions | Where-Object { $_.Product -eq "DeployR" } | Select-Object -First 1
+        if ($LatestDeployRVersion) {
+            Write-Host " Latest DeployR Version: $($LatestDeployRVersion.LatestAvailableVersion)" -ForegroundColor Cyan
+            Write-Host "  Status: $($LatestDeployRVersion.Status)" -ForegroundColor DarkGray
+        }
+    }
+}
 
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Confirming Windows Features for DeployR" -ForegroundColor Cyan
@@ -1128,48 +1454,48 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
     catch {
         write-host "Catch block executed"
     }
-
+    
     $vdirForMimeCheck = $null
     if (Get-Module -Name WebAdministration) {
         $vdirForMimeCheck = Get-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard" -ErrorAction SilentlyContinue
     }
-
+    
     if ($vdirForMimeCheck) {
-    # Table of required MIME types for iPXE and related boot files
-    $RequiredMimeTypes = @(
-    [PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
-    [PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
-    [PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
-    [PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
-    [PSCustomObject]@{ Extension = ".sdi";  MimeType = "application/octet-stream"; Description = "boot.sdi file" },
-    [PSCustomObject]@{ Extension = ".bcd";  MimeType = "application/octet-stream"; Description = "boot.bcd boot configuration files" },
-    [PSCustomObject]@{ Extension = ".";     MimeType = "application/octet-stream"; Description = "BCD file (with no extension)" },
-    [PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
-    [PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
-    [PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
-    [PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
-    [PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
-    [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
-    [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
-    )
-
-    if (Get-Module -name WebAdministration) {
-        $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
-        # Loop through required MIME types and check if present in IIS
-        foreach ($mime in $RequiredMimeTypes) {
-            if ($IISMimeTypes.value -contains $mime.Extension) {
-                Write-Host ("✓ IIS MIME type for {0} ({1}) is configured." -f $mime.Extension, $mime.Description) -ForegroundColor Green
-            } else {
-                Write-Host ("✗ IIS MIME type for {0} ({1}) is NOT configured." -f $mime.Extension, $mime.Description) -ForegroundColor Red
-                Write-Host "Remediation: Run following Command" -ForegroundColor Yellow
-                Write-Host ("New-WebMimeType -FileExtension '{0}' -MimeType '{1}' -PSPath 'IIS:\Sites\Default Web Site'" -f $mime.Extension, $mime.MimeType) -ForegroundColor DarkGray
-                $IISMimeTypeUpdateRequired = $true
+        # Table of required MIME types for iPXE and related boot files
+        $RequiredMimeTypes = @(
+        [PSCustomObject]@{ Extension = ".bin";  MimeType = "application/octet-stream"; Description = "wimboot.bin file" },
+        [PSCustomObject]@{ Extension = ".efi";  MimeType = "application/octet-stream"; Description = "EFI loader files" },
+        [PSCustomObject]@{ Extension = ".com";  MimeType = "application/octet-stream"; Description = "BIOS boot loaders" },
+        [PSCustomObject]@{ Extension = ".n12";  MimeType = "application/octet-stream"; Description = "BIOS loaders without F12 key press" },
+        [PSCustomObject]@{ Extension = ".sdi";  MimeType = "application/octet-stream"; Description = "boot.sdi file" },
+        [PSCustomObject]@{ Extension = ".bcd";  MimeType = "application/octet-stream"; Description = "boot.bcd boot configuration files" },
+        [PSCustomObject]@{ Extension = ".";     MimeType = "application/octet-stream"; Description = "BCD file (with no extension)" },
+        [PSCustomObject]@{ Extension = ".wim";  MimeType = "application/octet-stream"; Description = "winpe images (optional)" },
+        [PSCustomObject]@{ Extension = ".pxe";  MimeType = "application/octet-stream"; Description = "iPXE BIOS loader files" },
+        [PSCustomObject]@{ Extension = ".kpxe"; MimeType = "application/octet-stream"; Description = "UNDIonly version of iPXE" },
+        [PSCustomObject]@{ Extension = ".ttf";  MimeType = "application/octet-stream"; Description = "boot fonts" },
+        [PSCustomObject]@{ Extension = ".iso";  MimeType = "application/octet-stream"; Description = ".iso file type" },
+        [PSCustomObject]@{ Extension = ".img";  MimeType = "application/octet-stream"; Description = ".img file type" },
+        [PSCustomObject]@{ Extension = ".ipxe"; MimeType = "text/plain";                Description = ".ipxe file" }
+        )
+        
+        if (Get-Module -name WebAdministration) {
+            $IISMimeTypes = Get-WebConfigurationProperty -Filter /system.webServer/staticContent/mimeMap -Name "fileExtension" -PSPath "IIS:\Sites\Default Web Site"
+            # Loop through required MIME types and check if present in IIS
+            foreach ($mime in $RequiredMimeTypes) {
+                if ($IISMimeTypes.value -contains $mime.Extension) {
+                    Write-Host ("✓ IIS MIME type for {0} ({1}) is configured." -f $mime.Extension, $mime.Description) -ForegroundColor Green
+                } else {
+                    Write-Host ("✗ IIS MIME type for {0} ({1}) is NOT configured." -f $mime.Extension, $mime.Description) -ForegroundColor Red
+                    Write-Host "Remediation: Run following Command" -ForegroundColor Yellow
+                    Write-Host ("New-WebMimeType -FileExtension '{0}' -MimeType '{1}' -PSPath 'IIS:\Sites\Default Web Site'" -f $mime.Extension, $mime.MimeType) -ForegroundColor DarkGray
+                    $IISMimeTypeUpdateRequired = $true
+                }
+            }
+            if ($IISMimeTypeUpdateRequired) {
+                write-host -ForegroundColor Magenta "See this Page for details: https://documentation.2pintsoftware.com/2pxe-server/configuration/iis-and-branchcache-setup-and-config"
             }
         }
-        if ($IISMimeTypeUpdateRequired) {
-            write-host -ForegroundColor Magenta "See this Page for details: https://documentation.2pintsoftware.com/2pxe-server/configuration/iis-and-branchcache-setup-and-config"
-        }
-    }
     }
     else {
         Write-Host "Skipping IIS MIME type checks because StifleRDashboard virtual directory is not present." -ForegroundColor DarkGray
@@ -1237,6 +1563,7 @@ if ($Installed_2Pint_Software_StifleR_Server){
 }
 #Test DeployR Service
 if ($Installed_2Pint_Software_DeployR){
+    
     $DeployRService = Get-Service -Name '2Pint Software DeployR Service'
     if ($DeployRService.Status -eq 'Running') {
         Write-Host "2Pint DeployR service is running." -ForegroundColor Green
@@ -1314,14 +1641,14 @@ if ($Installed_2Pint_Software_StifleR_Server){
             elseif ($licenseKeys -isnot [System.Collections.IEnumerable] -or $licenseKeys -is [string]) {
                 $licenseKeys = @($licenseKeys)
             }
-
+            
             $prod = $null
             foreach ($licenseKey in @($licenseKeys | Where-Object { $_ })) {
                 Write-Host "Testing 2Pint Heartbeat with a license key..." -ForegroundColor DarkGray
                 $headers = @{ 
                     "X-API-Key" = [System.Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.Text.Encoding]::UTF8.GetBytes($licenseKey)))
                 }
-
+                
                 try {
                     $prod = Invoke-RestMethod -Uri "https://api.service.2pintsoftware.com/location/ip" -Method Get -Headers $headers -ErrorAction Stop
                     if ($prod) {
@@ -1334,7 +1661,7 @@ if ($Installed_2Pint_Software_StifleR_Server){
                     Write-Host "License key failed, trying next one if available..." -ForegroundColor Yellow
                 }
             }
-
+            
             if (-not $prod) {
                 Write-Host "No valid license key was accepted by the 2Pint Heartbeat service." -ForegroundColor Red
             }
@@ -1493,6 +1820,24 @@ if ($Installed_2Pint_Software_DeployR){
         if (($DeployRRegData.StifleRServerApiUrl) -and ($DeployRRegData.StifleRServerApiUrl)){
             if (($DeployRRegData.StifleRServerApiUrl) -match ($DeployRRegData.StifleRServerApiUrl)){
                 Write-Host " StifleR API URI matches in both Dashboard Registry & DeployR Registry" -foregroundColor Green
+                
+                #Check if Infrasturcture Service is registered
+                $Result = Invoke-RestMethod "$($DeployRRegData.StifleRServerApiUrl)/api/infrastructureService" -UseDefaultCredentials
+                if ($null -eq $Result) {
+                    Write-Host "  DeployR Infrastructure Service is NOT registered with StifleR API, or Unable to reach StifleR API." -ForegroundColor Red
+                }
+                else {
+                    $DeployRresult = $result | Where-Object { $_.Type -eq 11 } #Type 11 is DeployR Infrastructure Service
+                    if ($DeployRresult.status -eq '50') {
+                        Write-Host "   DeployR Infrastructure Service is Approved with StifleR API." -ForegroundColor Green
+                        write-Host "    DeployR Version: $($DeployRresult.version)" -ForegroundColor DarkGray
+                        Write-Host "    DeployR Infrastructure Service registration Date: $($DeployRresult.registrationDate)" -ForegroundColor DarkGray
+                        Write-Host "    DeployR Infrastructure Service heartbeat Date: $($DeployRresult.heartbeatDate)" -ForegroundColor DarkGray
+                    }
+                    else {
+                        Write-Host "  DeployR Infrastructure Service is NOT Approved with StifleR API." -ForegroundColor Red
+                    }
+                }
             }
             else{
                 Write-Host " StifleR API URI does NOT match between Dashboard Registry and DeployR Registry" -ForegroundColor Red
@@ -1613,10 +1958,13 @@ if ($Installed_2Pint_Software_DeployR){
     #Get Certificate from Local Machine Store that matches
     $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My  | Where-Object { $_.Thumbprint -match $CertThumbprintRegValue }
     if ($CertThumbprint) {
-        Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+        Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+        Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+        Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+        Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
     }
     else {
-        Write-Host "Certificate NOT found." -ForegroundColor Red
+        Write-Host "  Certificate NOT found." -ForegroundColor Red
     }
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     #Test StifleR Server URL
@@ -1631,23 +1979,23 @@ if ($Installed_2Pint_Software_DeployR){
     
     
     
-    Write-Host "Testing StifleR Server URL... $($StifleRServerURL)" -ForegroundColor Cyan
+    Write-Host " Testing StifleR Server URL... $($StifleRServerURL)" -ForegroundColor Green
     $StifleRTest = Test-Url -Url $StifleRServerURL
     if ($StifleRTest) {
-        Write-Host "StifleR Server URL is accessible." -ForegroundColor Green
+        Write-Host "  StifleR Server URL is accessible." -ForegroundColor DarkGray
         $Test443 = Test-NetConnection -ComputerName $StifleRServerName -Port 443
         if ($Test443) {
-            Write-Host "StifleR Server Port 443 is accessible." -ForegroundColor Green
+            Write-Host "  StifleR Server Port 443 is accessible." -ForegroundColor DarkGray
         }
         $Test9000 = Test-NetConnection -ComputerName $StifleRServerName -Port 9000
         if ($Test9000) {
-            Write-Host "StifleR Server Port 9000 is accessible." -ForegroundColor Green
+            Write-Host "  StifleR Server Port 9000 is accessible." -ForegroundColor DarkGray
         }
     }
     else {
         Write-Host "StifleR Server URL is NOT accessible." -ForegroundColor Red
     }
-    Write-Host "Testing DeployR Server URL... $($DeployRURL)" -ForegroundColor Cyan
+    Write-Host " Testing DeployR Server URL... $($DeployRURL)" -ForegroundColor Green
     $DeployRTest = Test-Url -Url $DeployRURL
     if ($DeployRTest) {
         
@@ -1655,34 +2003,34 @@ if ($Installed_2Pint_Software_DeployR){
         
         $Test7281 = Test-NetConnection -ComputerName $DeployRServerName -Port 7281
         if ($Test7281) {
-            Write-Host "DeployR Server Port 7281 is accessible." -ForegroundColor Green
+            Write-Host "  DeployR Server Port 7281 is accessible." -ForegroundColor DarkGray
         }
         $Test7282 = Test-NetConnection -ComputerName $DeployRServerName -Port 7282
         if ($Test7282) {
-            Write-Host "DeployR Server Port 7282 is accessible." -ForegroundColor Green
+            Write-Host "  DeployR Server Port 7282 is accessible." -ForegroundColor DarkGray
         }
     }
     else {
-        Write-Host "DeployR Server URL is NOT accessible." -ForegroundColor Red
+        Write-Host "  DeployR Server URL is NOT accessible." -ForegroundColor Red
     }
     
 }
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Magenta
+Write-Host "Checking Certificate... on Ports 443 & 9000 & 8051 & 8050" -ForegroundColor Cyan
 # Get the certificate hash from the HTTP.SYS binding for port 443
 $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:443 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 443): $certHash" -ForegroundColor Cyan
+    Write-Host "Certificate Thumbprint for HTTPS (port 443): $certHash" -ForegroundColor Cyan
     if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+        Write-Host "  The certificate hash matches the DeployR configuration." -ForegroundColor Green
     }
     else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
+        Write-Host "  The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
     }
 } else {
-    Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
+    Write-Host "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
     # Fallback: Scan common IPs (adjust as needed)
     $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
     $found = $false
@@ -1700,42 +2048,42 @@ $certHash = $Null
 $certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
 
 if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 9000 StifleR): $certHash" -ForegroundColor Cyan
+    Write-Host "Certificate Thumbprint for HTTPS (port 9000 - StifleR): $certHash" -ForegroundColor Cyan
     if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
+        Write-Host "  The certificate hash matches the DeployR configuration." -ForegroundColor Green
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
         if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+            Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
         }
         else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
+            Write-Host "  Certificate NOT found." -ForegroundColor Red
         }
     }
     else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
+        Write-Host "  The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
         if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+            Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
         }
         else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
+            Write-Host "  Certificate NOT found." -ForegroundColor Red
         }
     }
 } else {
-    Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
+    Write-Host "No SSL binding found for port 9000. Trying all IPs..." -ForegroundColor Yellow
     # Fallback: Scan common IPs (adjust as needed)
     $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
     $found = $false
     foreach ($ip in $ips) {
-        $hash = netsh http show sslcert ipport="$ip`:443" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+        $hash = netsh http show sslcert ipport="$ip`:9000" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
         if ($hash) {
-            Write-Host "Certificate Thumbprint for HTTPS (port 443) on $ip`: $hash" -ForegroundColor Yellow
+            Write-Host "Certificate Thumbprint for HTTPS (port 9000) on $ip`: $hash" -ForegroundColor Yellow
             $found = $true
             break
         }
@@ -1757,22 +2105,22 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
     }
     $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     if ($iPXEcertHash) {
-        Write-Host  "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
+        Write-Host "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
         
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $iPXEcertHash }
         if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+            Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
         }
         else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
+            Write-Host "  Certificate NOT found." -ForegroundColor Red
         }
     }
     
 } else {
-    Write-Host  "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
+    Write-Host "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
     # Fallback: Scan common IPs (adjust as needed)
     $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
     $found = $false
@@ -1793,20 +2141,20 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
     $2PXEConfigFilePath = "C:\Program Files\2Pint Software\2PXE\2Pint.2PXE.Service.exe.config"
     
     if ($2PXEcertHash) {
-        Write-Host  "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
+        Write-Host "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
         
         $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $2PXEcertHash }
         if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+            Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
         }
         else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
+            Write-Host "  Certificate NOT found." -ForegroundColor Red
         }
     } else {
-        Write-Host  "No SSL binding found for port 8050. Trying all IPs..." -ForegroundColor Yellow
+        Write-Host "No SSL binding found for port 8050. Trying all IPs..." -ForegroundColor Yellow
         # Fallback: Scan common IPs (adjust as needed)
         $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
         $found = $false
@@ -1834,11 +2182,12 @@ if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Soft
         Write-Host "Checking Settings in 2PXE config file: $2PXEConfigFilePath" -ForegroundColor Cyan
         $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
         $2PXEConfigiPXEAnywhereWebServiceURI = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "iPXEAnywhereWebServiceURI" } | Select-Object -ExpandProperty value
+        
         if ($2PXEConfigiPXEAnywhereWebServiceURI) {
             if ($DeployRURL){
                 if ($2PXEConfigiPXEAnywhereWebServiceURI -match $DeployRURL) {
                     Write-Host "iPXEAnywhereWebServiceURI in 2PXE config matches DeployR Server URL." -ForegroundColor Green
-                    Write-Host " iPXEAnywhereWebServiceURI from 2PXE config file: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
+                    Write-Host "  iPXEAnywhereWebServiceURI: $2PXEConfigiPXEAnywhereWebServiceURI" -ForegroundColor DarkGray
                 }
                 else {
                     Write-Host "iPXEAnywhereWebServiceURI in 2PXE config does NOT match DeployR Server URL." -ForegroundColor Red
@@ -1848,8 +2197,9 @@ if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Soft
             }
         }
         else{
-            Write-Host "2PXE Config Missing Value for iPXEAnywhereWebServiceURI" -ForegroundColor Red
+            Write-Host "  2PXE Config Missing Value for iPXEAnywhereWebServiceURI" -ForegroundColor Red
         }
+        
     }
     
 }
@@ -1857,20 +2207,38 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
     if (Test-Path -Path $2PXEConfigFilePath) {
         $2PXEConfig = [xml](Get-Content -Path $2PXEConfigFilePath)
         $2PXEConfigExternalFQDNOverride = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "ExternalFQDNOverride" } | Select-Object -ExpandProperty value
-        Write-Host "Additional Config Settings:" -ForegroundColor Cyan
-        if ($2PXEConfigExternalFQDNOverride -ne $null -and $2PXEConfigExternalFQDNOverride -ne "") {
-            Write-Host " ExternalFQDNOverride in 2PXE config: $2PXEConfigExternalFQDNOverride" -ForegroundColor DarkGray
+        Write-Host "Additional Config Settings (2PXE):" -ForegroundColor Cyan
+        if (-not [string]::IsNullOrWhiteSpace($2PXEConfigExternalFQDNOverride)) {
+            Write-Host "  ExternalFQDNOverride: $2PXEConfigExternalFQDNOverride" -ForegroundColor DarkGray
+        }
+        $2PXEConfigCustomCAThumbprint = $2PXEConfig.configuration.appSettings.add | Where-Object { $_.key -eq "CustomCAThumbprint" } | Select-Object -ExpandProperty value
+        if ($2PXEConfigCustomCAThumbprint) {
+            Write-Host "  CustomCAThumbprint: $2PXEConfigCustomCAThumbprint" -ForegroundColor DarkGray
+            #Get the certificate from the local store that matches the thumbprint in the Trusted Root Certification Authorities store
+            $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\Root  | Where-Object { $_.Thumbprint -match $2PXEConfigCustomCAThumbprint }
+            if ($CertThumbprint) {
+                Write-Host "  Found Custom CA certificate in local Trusted Root store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+                Write-Host "    DNSNameList: $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+                Write-Host "    Subject:     $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+                Write-Host "    Issuer:      $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+            }
+            else {
+                Write-Host "  Custom CA certificate NOT found in Trusted Root Certification Authorities store." -ForegroundColor Red
+            }
+        }
+        else{
+            #Write-Host "2PXE Config Missing Value for CustomCAThumbprint" -ForegroundColor Red
         }
     }
 }
 #Testing Firewall Rules:
 
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Firewall Rules to ensure Ports are Open" -ForegroundColor Cyan
+Write-Host "Checking Firewall Rules to ensure Ports are Open" -ForegroundColor Cyan
 $Ports = Get-NetFirewallPortFilter
 $InboundRules = Get-NetFirewallRule -Direction Inbound
 foreach ($FirewallRule in $FirewallRules){
-    Write-Host "Checking Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor Yellow
+    Write-Host "Checking Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor DarkCyan
     $RulePorts = $Ports | Where-Object { $_.LocalPort -eq $FirewallRule.Port -and $_.Protocol -eq $FirewallRule.Protocol } | Select-Object -first 1
     if ($RulePorts){
         foreach ($Port in $RulePorts){
@@ -1885,54 +2253,58 @@ foreach ($FirewallRule in $FirewallRules){
     }
 }
 #Check StifleR Infrastructure Approval for DeployR if StifleR Wmi Agent is installed
+<#
 if ($Installed_2Pint_Software_StifleR_WmiAgent) {
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    write-host "Checking for StifleR Infrastructure Approval for DeployR" -ForegroundColor Cyan
-    $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-    if ($InfraServices) {
-        Write-Host "StifleR Infrastructure Services found." -ForegroundColor Green
-    } else {
-        Write-Host "No StifleR Infrastructure Services found." -ForegroundColor Red
-    }
-    if (!$InfraServices) {
-        
-        Write-Host "Sometimes if the service just started, this can take a bit"
-        write-host "Waiting for a minute and going to try again..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 50..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-Host " 40..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 30..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 20..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-        write-host " 10..."
-        Start-Sleep -seconds 10
-        $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
-    }
-    if ($InfraServices) {
-        $DeployR = $InfraServices | Where-Object {$_.Type -eq "DeployR"}
-        if ($DeployR){
-            Write-Host "StifleR Infrastructure for DeployR found." -ForegroundColor Green
-            if ($DeployR.Status -eq "IsApproved") {
-                Write-Host "DeployR Status: Approved" -ForegroundColor Green
-            } else {
-                Write-Host "DeployR Status: NOT Approved" -ForegroundColor Red
-            }
-        }
-        else{
-            Write-Host "No StifleR Infrastructure for DeployR found." -ForegroundColor Red
-        }
-    } else {
-        Write-Host "StifleR Infrastructure Services are NOT available." -ForegroundColor Red
-    }
+Write-Host "=========================================================================" -ForegroundColor DarkGray
+Write-Host "Checking for StifleR Infrastructure Approval for DeployR" -ForegroundColor Cyan
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+if ($InfraServices) {
+Write-Host "StifleR Infrastructure Services found." -ForegroundColor Green
+} else {
+Write-Host "No StifleR Infrastructure Services found." -ForegroundColor Red
 }
+if (!$InfraServices) {
+
+Write-Host "Sometimes if the service just started, this can take a bit"
+write-host "Waiting for a minute and going to try again..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+write-host " 50..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+write-Host " 40..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+write-host " 30..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+write-host " 20..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+write-host " 10..."
+Start-Sleep -seconds 10
+$InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction SilentlyContinue
+}
+if ($InfraServices) {
+$DeployR = $InfraServices | Where-Object {$_.Type -eq "DeployR"}
+if ($DeployR){
+Write-Host "StifleR Infrastructure for DeployR found." -ForegroundColor Green
+if ($DeployR.Status -eq "IsApproved") {
+Write-Host "DeployR Status: Approved" -ForegroundColor Green
+} else {
+Write-Host "DeployR Status: NOT Approved" -ForegroundColor Red
+}
+}
+else{
+Write-Host "No StifleR Infrastructure for DeployR found." -ForegroundColor Red
+}
+} else {
+Write-Host "StifleR Infrastructure Services are NOT available." -ForegroundColor Red
+}
+}
+#>
+
+
 #Remediation 
 #prompt user to do installs
 Write-Host "=========================================================================" -ForegroundColor DarkGray
@@ -1959,15 +2331,15 @@ if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
         Write-Host "Would you like to create the StifleRDashboard virtual directory now? (Y/N): " -ForegroundColor Yellow -NoNewline
         $response = Read-Host
         if ($response -eq 'Y' -or $response -eq 'y') {
-            try {
-                New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files' -ErrorAction Stop
-                Write-Host "✓ StifleRDashboard virtual directory created successfully." -ForegroundColor Green
-            } catch {
-                Write-Host "✗ Failed to create virtual directory: $_" -ForegroundColor Red
-                Write-Host "Please run the command manually with elevated permissions." -ForegroundColor Yellow
-            }
+        try {
+        New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files' -ErrorAction Stop
+        Write-Host "✓ StifleRDashboard virtual directory created successfully." -ForegroundColor Green
+        } catch {
+        Write-Host "✗ Failed to create virtual directory: $_" -ForegroundColor Red
+        Write-Host "Please run the command manually with elevated permissions." -ForegroundColor Yellow
+        }
         } else {
-            Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
+        Write-Host "Skipping virtual directory creation." -ForegroundColor DarkGray
         }
         #>
         Write-Host "Skipping virtual directory remediation prompt (temporarily disabled)." -ForegroundColor DarkGray
@@ -1981,8 +2353,8 @@ if ($IISMimeTypeUpdateRequired) {
     Write-Host "Would you like to add the missing IIS MIME types now? (Y/N): " -ForegroundColor Yellow -NoNewline
     $response = Read-Host
     if ($response -eq 'Y' -or $response -eq 'y') {
-        Set-IISMIMETypes
-        Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
+    Set-IISMIMETypes
+    Write-Host "✓ Missing IIS MIME types added successfully." -ForegroundColor Green
     }
     #>
     Write-Host "Skipping IIS MIME type remediation prompt (temporarily disabled)." -ForegroundColor DarkGray

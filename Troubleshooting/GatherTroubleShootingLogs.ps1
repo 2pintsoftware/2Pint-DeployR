@@ -9,7 +9,8 @@ Change Log
 - 2026.03.12 - Added Grabbing info of all StifleR, 2PXE, and iPXE related Event Logs to a dedicated EventLogs folder in the output
 - 2026.04.03 - Added check for default Content location.
 - 2026.06.22 - Added grabbing the 2PXE Service Config file if it exists
-- 2026.07.14 - Added grabbing the pPplication and System event logs
+- 2026.07.14 - Added grabbing the Application and System event logs
+- 2026.07.28 - Added grabbing certificate information and dumping to txt file
 #>
 
 
