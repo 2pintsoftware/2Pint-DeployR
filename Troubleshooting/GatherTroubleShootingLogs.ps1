@@ -205,7 +205,7 @@ Get-ChildItem -Path $2PintRegPath -Recurse | Out-File -FilePath "$TempFolder\2Pi
 $ComputerInfo = Get-ComputerInfo
 $ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 
-#Get Cert Information
+#Region Get Cert Information
 $AllLocalCerts = Get-ChildItem -Path Cert:\LocalMachine\My
 
 $ExcludedCertProperties = @(
@@ -289,6 +289,14 @@ for ($i = 0; $i -lt $FilteredLocalCerts.Count; $i++) {
         "--------------------------------------------" | Out-File -FilePath $CertInfoPath -Append -Force
     }
 }
+
+#Grab Certs from 2PXE Certificates Folder (if it exists)
+$Path = "C:\ProgramData\2Pint Software\2PXE\Certificates"
+if (Test-Path -Path $Path) {
+    Copy-Item -Path $Path -Destination "$TempFolder\2PXECertificateFolder" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+#EndRegion
 
 
 #Get DeployR Event Logs
