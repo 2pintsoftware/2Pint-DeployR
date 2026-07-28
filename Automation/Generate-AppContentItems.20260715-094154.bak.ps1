@@ -431,70 +431,32 @@ function Get-GreenshotLatestUrl {
 # Function to get latest Paint.NET download URL
 function Get-PaintDotNetLatestUrl {
     [CmdletBinding()]
-    param(
-    [ValidateSet('x64', 'arm64')]
-    [string]$Architecture = 'x64'
-    )
+    param()
     
-    # Helper that always tries GitHub release assets and returns the best architecture match.
-    function Get-PaintDotNetFromGitHub {
-        param([string]$Architecture)
-
-        $apiUrl = "https://api.github.com/repos/paintdotnet/release/releases/latest"
-        $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
-        $version = $release.tag_name -replace '^v', ''
-
-        # Prefer winmsi package, then install package, matching requested architecture.
-        $installer = $release.assets | Where-Object { $_.name -match "paint\.net\.$([regex]::Escape($version))\.winmsi\.$Architecture\.zip$" } | Select-Object -First 1
-        if (-not $installer) {
-            $installer = $release.assets | Where-Object { $_.name -match "paint\.net\.$([regex]::Escape($version))\.install\.$Architecture\.zip$" } | Select-Object -First 1
-        }
-
-        # Last-resort fallbacks if naming changes in future releases.
-        if (-not $installer) {
-            $installer = $release.assets | Where-Object { $_.name -match "paint\.net\..*\.winmsi\.$Architecture\.zip$" } | Select-Object -First 1
-        }
-        if (-not $installer) {
-            $installer = $release.assets | Where-Object { $_.name -match "paint\.net\..*\.install\.$Architecture\.zip$" } | Select-Object -First 1
-        }
-
-        if (-not $installer) {
-            throw "Could not find Paint.NET GitHub release asset for architecture '$Architecture'."
-        }
-
-        Write-Verbose "Paint.NET (GitHub) URL: $($installer.browser_download_url)"
-        Write-Verbose "Paint.NET (GitHub) Version: $version"
-
-        return [PSCustomObject]@{
-            AppName = "Paint.NET"
-            Version = $version
-            URL = $installer.browser_download_url
-            SilentInstallCommand = "FILENAME /auto DESKTOPSHORTCUT=0"
-        }
-    }
-
     try {
-        # First try the vendor page in case GitHub API is throttled.
+        # Paint.NET requires scraping their website as they don't have a direct API
         $paintPage = Invoke-WebRequest -Uri "https://www.getpaint.net/download.html" -UseBasicParsing -ErrorAction Stop
-
-        $downloadLink = $paintPage.Links | Where-Object { $_.href -match "paintdotnet\.[\d.]+\.install\.$Architecture\.zip$" } | Select-Object -First 1
-
+        
+        # Look for the download link pattern
+        $downloadLink = $paintPage.Links | Where-Object { $_.href -match 'paintdotnet\.[\d.]+\.install\.x64\.zip$' } | Select-Object -First 1
+        
         if ($downloadLink) {
             $url = $downloadLink.href
             if ($url -notmatch '^https?://') {
                 $url = "https://www.getpaint.net$url"
             }
-
+            
+            # Extract version from filename pattern like paintdotnet.5.0.13.install.x64.zip
             if ($url -match 'paintdotnet\.([\d.]+)\.install') {
                 $version = $matches[1]
             }
             else {
                 $version = "Unknown"
             }
-
+            
             Write-Verbose "Paint.NET URL: $url"
             Write-Verbose "Paint.NET Version: $version"
-
+            
             return [PSCustomObject]@{
                 AppName = "Paint.NET"
                 Version = $version
@@ -502,19 +464,35 @@ function Get-PaintDotNetLatestUrl {
                 SilentInstallCommand = "FILENAME /auto DESKTOPSHORTCUT=0"
             }
         }
-
-        Write-Verbose "Paint.NET download link not found on website. Falling back to GitHub release assets."
-        return Get-PaintDotNetFromGitHub -Architecture $Architecture
+        else {
+            # Fallback to direct GitHub releases
+            $apiUrl = "https://api.github.com/repos/paintdotnet/release/releases/latest"
+            $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
+            
+            $version = $release.tag_name -replace '^v', ''
+            
+            $installer = $release.assets | Where-Object { $_.name -match 'paint\.net.*\.install\.x64\.zip$' } | Select-Object -First 1
+            
+            if ($installer) {
+                Write-Verbose "Paint.NET URL: $($installer.browser_download_url)"
+                Write-Verbose "Paint.NET Version: $version"
+                
+                return [PSCustomObject]@{
+                    AppName = "Paint.NET"
+                    Version = $version
+                    URL = $installer.browser_download_url
+                    SilentInstallCommand = "FILENAME /auto DESKTOPSHORTCUT=0"
+                }
+            }
+            else {
+                Write-Error "Could not find Paint.NET download link"
+                return $null
+            }
+        }
     }
     catch {
-        Write-Warning "Paint.NET website lookup failed ($($_.Exception.Message)). Falling back to GitHub release assets."
-        try {
-            return Get-PaintDotNetFromGitHub -Architecture $Architecture
-        }
-        catch {
-            Write-Error "Failed to get Paint.NET info from website and GitHub fallback: $($_.Exception.Message)"
-            return $null
-        }
+        Write-Error "Failed to get Paint.NET info: $_"
+        return $null
     }
 }
 
@@ -984,32 +962,17 @@ $NotepadPlusPlus = Get-NotepadPlusPlusLatestUrl -Architecture $Architecture
 $VLC = Get-VLCLatestUrl -Architecture $Architecture
 $SevenZip = Get-7ZipLatestUrl -Architecture $Architecture
 #$Greenshot = Get-GreenshotLatestUrl
-$PaintDotNet = Get-PaintDotNetLatestUrl -Architecture $Architecture
+$PaintDotNet = Get-PaintDotNetLatestUrl
 $OBSStudio = Get-OBSStudioLatestUrl -Architecture $Architecture
 $VSCode = Get-VSCodeLatestUrl -Architecture $Architecture
 
 # Display retrieved application info
 $apps = @($Firefox, $Thunderbird, $NotepadPlusPlus, $VLC, $SevenZip, $PaintDotNet, $OBSStudio, $VSCode)
-
-# Keep only valid app objects to avoid downstream binding failures.
-$validApps = @()
+#$apps = @($SevenZip)
 foreach ($app in $apps) {
-    if ($null -eq $app) {
-        Write-Warning "An app metadata lookup returned null and will be skipped."
-        continue
+    if ($app) {
+        Write-Host "  ✓ $($app.AppName) v$($app.Version)" -ForegroundColor Green
     }
-
-    if ([string]::IsNullOrWhiteSpace($app.AppName) -or [string]::IsNullOrWhiteSpace($app.Version) -or [string]::IsNullOrWhiteSpace($app.URL)) {
-        Write-Warning "Invalid app metadata detected. AppName='$($app.AppName)' Version='$($app.Version)' URL='$($app.URL)'. Skipping this entry."
-        continue
-    }
-
-    $validApps += $app
-    Write-Host "  ✓ $($app.AppName) v$($app.Version)" -ForegroundColor Green
-}
-
-if ($validApps.Count -eq 0) {
-    throw "No valid app metadata was retrieved. Aborting before DeployR operations."
 }
 # Download each application
 Write-Host "`n--- Downloading Applications ---" -ForegroundColor Yellow
@@ -1022,18 +985,7 @@ $deployRStats = @{
     Failed = @()
 }
 
-Foreach ($app in $validApps) {
-    if ([string]::IsNullOrWhiteSpace($app.AppName) -or [string]::IsNullOrWhiteSpace($app.Version) -or [string]::IsNullOrWhiteSpace($app.URL)) {
-        Write-Warning "Skipping invalid app entry during processing."
-        $deployRStats.Failed += [PSCustomObject]@{
-            AppName = $app.AppName
-            Version = $app.Version
-            Action = "Skipped - Invalid metadata"
-            Error = "AppName, Version, or URL is empty"
-        }
-        continue
-    }
-
+Foreach ($app in $apps) {
     Write-Output "Testing DeployR for $($app.AppName) v$($app.Version)"
     $AppTestResults = Test-DeployRAppExists -AppName $app.AppName -AppVersion $app.Version -AllApps $AllApps
     if ($AppTestResults) {
@@ -1057,7 +1009,9 @@ Foreach ($app in $validApps) {
                     $installCommand = if ($result.ActualInstallCommand) { $result.ActualInstallCommand } else { $app.SilentInstallCommand }
                     Write-Host "    Install Command: $installCommand" -ForegroundColor Gray
                     Update-DeployRApp -AppName $app.AppName -AppVersion $app.Version -AppSourceFolder ($result.Destination | Split-Path) -InstallationCommandLine "$installCommand" -AllApps $AllApps
-                    Confirm-DeployRAppTags -AppName $app.AppName -Tags $Tags
+                    $AppMetaData = Get-DeployRMetaData -Type ContentItem | where-object {$_.name -eq $app.AppName}
+                    $AppMetaData.tags = $Tags
+                    $AppMetaData | Set-DeployRMetadata -Type ContentItem
                     $deployRStats.Updated += [PSCustomObject]@{
                         AppName = $app.AppName
                         Version = $app.Version
@@ -1096,7 +1050,9 @@ Foreach ($app in $validApps) {
                 $installCommand = if ($result.ActualInstallCommand) { $result.ActualInstallCommand } else { $app.SilentInstallCommand }
                 Write-Host "    Install Command: $installCommand" -ForegroundColor Gray
                 $NewApp = New-DeployRApp -AppName $app.AppName -AppSourceFolder ($result.Destination | Split-Path) -AppVersionDescription "$($app.Version)" -AppDescription "$AppDescription" -InstallationCommandLine "$installCommand"
-                Confirm-DeployRAppTags -AppName $app.AppName -Tags $Tags
+                $AppMetaData = Get-DeployRMetaData -Type ContentItem | where-object {$_.name -eq $app.AppName}
+                $AppMetaData.tags = $Tags
+                $AppMetaData | Set-DeployRMetadata -Type ContentItem
                 $deployRStats.Created += [PSCustomObject]@{
                     AppName = $app.AppName
                     Version = $app.Version
