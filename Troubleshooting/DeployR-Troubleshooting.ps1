@@ -48,7 +48,8 @@ Change Log
 - 2026.07.28 - Added More info about Certs being used in 2PXE and confirms the CustomCAThumbprint if used
 - 2026.07.28 - Modified process to detect if DeployR is Approved in Infra Services
 - 2026.07.28 - Added Check for Latest versions of DeployR & StifleR installed based on releases.2pintsoftware.com
-
+- 2026.07.29 - Updated to support iPXE 4.0 Apps (new names & registry locations)
+- 2026.07.29 - Updated the check for Infra Services API to provide better feedback if auth is the issue.
 
 To DO
 - Add if Statements for SQL Permissions checks and remediation, first check connection string to get instance name
@@ -78,15 +79,21 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
 [PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
 [PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
+)
+
+$2PintSoftware = @(
 [PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/deployr'}
 [PSCustomObject]@{Title = '2Pint Software StifleR Server'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR Dashboards'; Installed = $false; Notes = 'Required for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR WmiAgent'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
 [PSCustomObject]@{Title = '2Pint Software StifleR ActionHub'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/stifler'}
-[PSCustomObject]@{Title = '2Pint Software iPXE Anywhere WebService'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/ipxe-ws'}
-[PSCustomObject]@{Title = '2Pint Software PXE Server'; Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/2pxe-server'}
-
+[PSCustomObject]@{Title = '2Pint Software iPXE Anywhere WebService'; MatchPatterns = @('2Pint Software iPXE Anywhere WebService','2Pint Software iPXE Anywhere Web Service'); Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/ipxe-ws'}
+[PSCustomObject]@{Title = '2Pint Software PXE Server'; MatchPatterns = @('2Pint Software PXE Server','2Pint Software iPXE Anywhere 2PXE Service'); Installed = $false; Notes = 'OPTIONAL for DeployR Servers'; URL = 'https://documentation.2pintsoftware.com/2pxe-server'}
 )
+
+#Merge Software Lists
+$AllPreReqApps = $PreReqApps + $2PintSoftware
+
 $FirewallRules = @(
 [PSCustomObject]@{DisplayName = '2Pint DeployR HTTPS 7281'; Port = 7281; Protocol = 'TCP'}
 [PSCustomObject]@{DisplayName = '2Pint DeployR HTTP 7282'; Port = 7282; Protocol = 'TCP'}
@@ -1180,14 +1187,31 @@ $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "AppHos
 
 Write-Host "Checking for Pre-Requisite Applications..." -ForegroundColor Cyan
 $PreReqAppsStatus = @()
-foreach ($app in $PreReqApps) {
+foreach ($app in $AllPreReqApps) {
+    $matchPatterns = if ($app.PSObject.Properties.Name -contains 'MatchPatterns' -and $app.MatchPatterns) {
+        @($app.MatchPatterns)
+    }
+    else {
+        @($app.Title)
+    }
+
     $found = $installedApps | Where-Object { 
-        if ($app.ExactMatch) {
-            $_.DisplayName -eq $app.Title
-        } else {
-            $_.DisplayName -match [regex]::Escape($app.Title) -or
-            $_.DisplayName -like "*$($app.Title)*"
+        $isMatch = $false
+        foreach ($matchPattern in $matchPatterns) {
+            if ($app.ExactMatch) {
+                if ($_.DisplayName -eq $matchPattern) {
+                    $isMatch = $true
+                    break
+                }
+            }
+            else {
+                if ($_.DisplayName -match [regex]::Escape($matchPattern) -or $_.DisplayName -like "*$matchPattern*") {
+                    $isMatch = $true
+                    break
+                }
+            }
         }
+        $isMatch
     }
     
     if ($found) {
@@ -1822,8 +1846,38 @@ if ($Installed_2Pint_Software_DeployR){
                 Write-Host " StifleR API URI matches in both Dashboard Registry & DeployR Registry" -foregroundColor Green
                 
                 #Check if Infrasturcture Service is registered
-                $Result = Invoke-RestMethod "$($DeployRRegData.StifleRServerApiUrl)/api/infrastructureService" -UseDefaultCredentials
-                if ($null -eq $Result) {
+                $InfrastructureServiceUri = "$($DeployRRegData.StifleRServerApiUrl)/api/infrastructureService"
+                $Result = $null
+                $AuthPromptDetected = $false
+
+                try {
+                    $Result = Invoke-RestMethod $InfrastructureServiceUri -UseDefaultCredentials -ErrorAction Stop
+                }
+                catch {
+                    $errorMessage = $_.Exception.Message
+                    if ($errorMessage -match '401|403|Unauthorized|Forbidden') {
+                        Write-Host "  StifleR API authentication failed for infrastructure service endpoint." -ForegroundColor Red
+                        Write-Host "  The current user/computer credentials were not accepted by the API." -ForegroundColor Yellow
+                    }
+                    else {
+                        Write-Host "  Failed to query StifleR infrastructure service endpoint." -ForegroundColor Red
+                        Write-Host "  Error: $errorMessage" -ForegroundColor DarkGray
+                    }
+                }
+
+                if ($Result -is [string]) {
+                    # Detect interactive sign-in HTML that indicates auth/SSO challenge instead of API JSON.
+                    if ($Result -match '(?is)<!DOCTYPE\s+html|<html\b|Sign in to your account|aadcdn\.msftauth\.net|login\.microsoftonline\.com') {
+                        $AuthPromptDetected = $true
+                        Write-Host "  StifleR API returned an HTML sign-in/authentication page instead of API data." -ForegroundColor Yellow
+                        Write-Host "  This usually means integrated authentication is not working for this request context." -ForegroundColor Yellow
+                    }
+                }
+
+                if ($AuthPromptDetected) {
+                    # Auth prompt already reported above.
+                }
+                elseif ($null -eq $Result) {
                     Write-Host "  DeployR Infrastructure Service is NOT registered with StifleR API, or Unable to reach StifleR API." -ForegroundColor Red
                 }
                 else {
@@ -2092,16 +2146,31 @@ if ($certHash) {
 }
 
 if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
-    $iPXEWSRegPath = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'
-    if (Test-Path -Path $iPXEWSRegPath) {
-        $iPXEWSRegData = Get-ItemProperty -Path $iPXEWSRegPath
-        if ($iPXEWSRegData.ConnectionString) {
-            Write-Host "iPXE WS SQL Connection String from Registry: $($iPXEWSRegData.ConnectionString)" -ForegroundColor Cyan
-            Test-SQLConnection -ConnectionString $iPXEWSRegData.ConnectionString
+    $iPXEWSConnectionInfo = @(
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'; ValueName = 'ConnectionString' }
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'ConnectionString' }
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'AdvancedConnectionString' }
+    )
+
+    $iPXEWSConnectionStringFound = $false
+    $testediPXEWSConnectionStrings = @()
+    foreach ($regItem in $iPXEWSConnectionInfo) {
+        if (Test-Path -Path $regItem.Path) {
+            $iPXEWSRegData = Get-ItemProperty -Path $regItem.Path -ErrorAction SilentlyContinue
+            if ($iPXEWSRegData -and -not [string]::IsNullOrWhiteSpace($iPXEWSRegData.($regItem.ValueName))) {
+                $candidateConnectionString = $iPXEWSRegData.($regItem.ValueName)
+                if ($testediPXEWSConnectionStrings -notcontains $candidateConnectionString) {
+                    $testediPXEWSConnectionStrings += $candidateConnectionString
+                    $iPXEWSConnectionStringFound = $true
+                    Write-Host "iPXE WS SQL Connection String from Registry ($($regItem.Path)::$($regItem.ValueName)): $candidateConnectionString" -ForegroundColor Cyan
+                    Test-SQLConnection -ConnectionString $candidateConnectionString
+                }
+            }
         }
-        else {
-            Write-Host "iPXE WS SQL Connection String is NOT configured in Registry." -ForegroundColor Red
-        }
+    }
+
+    if (-not $iPXEWSConnectionStringFound) {
+        Write-Host "iPXE WS SQL Connection String is NOT configured in either legacy or current registry locations." -ForegroundColor Red
     }
     $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     if ($iPXEcertHash) {
