@@ -1,23 +1,38 @@
-<#This will generate a folder structure for the DeployR sources, which can be used to organize the files needed for deployment. 
-It will also copy the CM Trace executable and the 2PXE certificate (if it exists) to the appropriate locations within the WinPEContent folder.
+<#
+Builds a standard source folder structure used to stage DeployR-related content.
 
-Remember, DeployR has no tie back to this, it's just nice to keep track of sources for the ability to easily reference them or make edits and re-upload to DeployR when needed.
+What this script does:
+1. Detects all fixed local disks except C:.
+2. Selects the disk with the largest total capacity.
+3. Sets the source root to <SelectedDrive>:\SourceRepo (falls back to C:\SourceRepo if no other fixed disk exists).
+4. Creates the predefined folder tree for WinPE content, applications, OS packages, and driver packs.
+5. Copies CMTrace into WinPE content (or downloads it if missing locally).
+6. Copies the 2PXE certificate into WinPEContent\Certificates when present.
 
-UPDATE Variable: $DeployRSourcesPath to the desired location for the source files.
+Purpose:
+This is for organizing and maintaining source content used during deployment workflows.
+It is not a required DeployR component, but provides a consistent working structure for editing and re-uploading content.
 #>
-$DeployRSourcesPath = "E:\DeployRSources"
+
+$candidateDrives = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType = 3" |
+    Where-Object { $_.DeviceID -ne 'C:' }
+
+if ($candidateDrives) {
+    $selectedDrive = $candidateDrives | Sort-Object -Property Size -Descending | Select-Object -First 1
+    $DeployRSourcePath = "$($selectedDrive.DeviceID)\SourceRepo"
+    Write-Host "Selected source drive: $($selectedDrive.DeviceID) (size: $([math]::Round($selectedDrive.Size / 1GB, 2)) GB)" -ForegroundColor Cyan
+}
+else {
+    $DeployRSourcePath = "C:\SourceRepo"
+    Write-Host "No fixed drive besides C: was found. Falling back to $DeployRSourcePath" -ForegroundColor Yellow
+}
+
+$DeployRSourcesPath = $DeployRSourcePath
     
     Write-Host "Creating source directory structure in $DeployRSourcesPath..." -ForegroundColor Cyan
     
     # Define the folder structure
     $folderStructure = @(
-    # WinPEContent folders
-    "WinPEContent\Certificates",
-    "WinPEContent\Drivers",
-    "WinPEContent\ExtraFiles",
-    "WinPEContent\ExtraFiles\Windows",
-    "WinPEContent\ExtraFiles\Windows\System32",
-    "WinPEContent\WinRE",
     
     # Applications folders
     "Applications\2PintSoftware\StifleRClient",
@@ -34,10 +49,36 @@ $DeployRSourcesPath = "E:\DeployRSources"
     "OperatingSystems\ServerOS\Server2025",
     
     # DriverPacks folders
-    "DriverPacks\Dell",
-    "DriverPacks\HP",
-    "DriverPacks\Lenovo",
-    "DriverPacks\Panasonic"
+    # Full OS Driver Packs
+    "DriverPacks\X64\Win11\Dell",
+    "DriverPacks\X64\Win11\HP",
+    "DriverPacks\X64\Win11\Lenovo",
+    "DriverPacks\X64\Win11\Panasonic",
+    "DriverPacks\ARM64\Win11\Dell",
+    "DriverPacks\ARM64\Win11\HP",
+    "DriverPacks\ARM64\Win11\Lenovo",
+    "DriverPacks\ARM64\Win11\Panasonic"
+
+    # WinPE Driver Packs folders
+    "DriverPacks\X64\WinPE\Dell",
+    "DriverPacks\X64\WinPE\HP",
+    "DriverPacks\X64\WinPE\Lenovo",
+    "DriverPacks\X64\WinPE\Panasonic",
+    "DriverPacks\ARM64\WinPE\Dell",
+    "DriverPacks\ARM64\WinPE\HP",
+    "DriverPacks\ARM64\WinPE\Lenovo",
+    "DriverPacks\ARM64\WinPE\Panasonic"
+
+    #Other Content Items folders
+    # WinPEContent folders
+    "Other\Certificates",
+    "Other\ExtraFiles",
+    "Other\ExtraFiles\Windows",
+    "Other\ExtraFiles\Windows\System32",
+    "Other\WinRE",
+    "Other\CustomStepDefScripts",
+    "Other\CustomOrganizationScripts",
+    "Other\BrandingAssets"
     )
     
     # Create each folder in the structure
