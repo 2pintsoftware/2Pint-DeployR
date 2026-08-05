@@ -13,6 +13,10 @@
       before content is marked "not peerable"; default is 10, which can cause issues
       in environments with many devices - see 2Pint Software article:
       https://2pintsoftware.com/news/details/optimizing-branchcache-with-repubquorumsize-an-undocumented-yet-crucial-tweak)
+        - StifleR Client BCCacheSize: If the StifleR SettingsOptions key exists,
+            ensures BCCacheSize is set to the greater of:
+            * 25% of the cache drive size (in bytes)
+            * 40GB (42949672960 bytes)
 
 .NOTES
     Requires elevation (Run as Administrator).
@@ -127,6 +131,32 @@ if (-not (Test-Path -Path $RepubQuorumRegPath)) {
 Set-ItemProperty -Path $RepubQuorumRegPath -Name 'RepubQuorumSize' -Value $NewRepubQuorumSize -Type DWord -Force
 Write-Output "  RepubQuorumSize set to $NewRepubQuorumSize - restarting BranchCache service..."
 Restart-Service -Name PeerDistSvc -Force
+
+# Configure StifleR Client BCCacheSize only if SettingsOptions key already exists
+$StifleRSettingsRegPath = 'HKLM:\SOFTWARE\2Pint Software\StifleR\Client\SettingsOptions'
+$StifleRBCCacheValueName = 'BCCacheSize'
+$MinBCCacheBytes = 42949672960L  # 40GB
+$Calculated25PercentBytes = [int64][math]::Floor($VolumeSize * 0.25)
+$TargetBCCacheBytes = [int64][math]::Max($Calculated25PercentBytes, $MinBCCacheBytes)
+
+Write-Output ""
+Write-Output "Evaluating StifleR Client BCCacheSize setting..."
+if (Test-Path -Path $StifleRSettingsRegPath) {
+    $CurrentBCCacheValue = Get-ItemPropertyValue -Path $StifleRSettingsRegPath -Name $StifleRBCCacheValueName -ErrorAction SilentlyContinue
+    Write-Output "  Target BCCacheSize (bytes): $TargetBCCacheBytes"
+
+    if ($null -eq $CurrentBCCacheValue) {
+        New-ItemProperty -Path $StifleRSettingsRegPath -Name $StifleRBCCacheValueName -Value "$TargetBCCacheBytes" -PropertyType String -Force | Out-Null
+        Write-Output "  BCCacheSize did not exist. Created with value: $TargetBCCacheBytes"
+    }
+    else {
+        Set-ItemProperty -Path $StifleRSettingsRegPath -Name $StifleRBCCacheValueName -Value "$TargetBCCacheBytes" -Force
+        Write-Output "  BCCacheSize updated from '$CurrentBCCacheValue' to '$TargetBCCacheBytes'"
+    }
+}
+else {
+    Write-Output "  StifleR SettingsOptions key not found. Skipping BCCacheSize update (key will not be created)."
+}
 
 # --- Verify New Settings ---
 

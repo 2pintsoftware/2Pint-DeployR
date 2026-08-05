@@ -102,7 +102,7 @@ $DeployRSourcesPath = $DeployRSourcePath
     
     #Copy CM Trace to WinPE
     $sourceCMTracePath = "C:\Windows\System32\cmtrace.exe"
-    $destCMTracePath = Join-Path -Path $DeployRSourcesPath -ChildPath "WinPEContent\ExtraFiles\Windows\System32\cmtrace.exe"
+    $destCMTracePath = Join-Path -Path $DeployRSourcePath -ChildPath "Other\ExtraFiles\Windows\System32\cmtrace.exe"
     if (Test-Path -path $sourceCMTracePath) {
         Copy-Item -Path $sourceCMTracePath -Destination $destCMTracePath -Force -ErrorAction Stop
         Write-Host "Copied CM Trace to $destCMTracePath" -ForegroundColor Green
@@ -113,7 +113,7 @@ $DeployRSourcesPath = $DeployRSourcePath
     }
     # Copy 2PXE certificate to WinPEContent\Certificates if it exists
     $sourceCertPath = "C:\Program Files\2Pint Software\2PXE\x64\ca.crt"
-    $destCertFolder = Join-Path -Path $DeployRSourcesPath -ChildPath "WinPEContent\Certificates"
+    $destCertFolder = Join-Path -Path $DeployRSourcesPath -ChildPath "Other\Certificates"
     
     if (Test-Path -Path $sourceCertPath) {
         try {
