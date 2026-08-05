@@ -48,7 +48,6 @@ if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.
     #Set-DeployRHost "http://localhost:7282"
     $Passcode = (Get-Item -path 'HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings').GetValue("ClientPasscode")
     Connect-DeployR -Passcode $Passcode -ErrorAction Stop
-    $AllApps = Get-DeployRApplication
 
 } else {
     Write-Host "DeployR.Utility module not found. Please ensure DeployR Client is installed."
@@ -266,7 +265,7 @@ function Get-DellWinPE11DriverPack {
             if (-not $downloadSuccess) {
                 try {
                     Write-Host "  Attempting download using BITS..." -ForegroundColor Gray
-                    $bitsJob = Start-BitsTransfer -Source $cabUrl -Destination $DownloadPath -DisplayName "Dell WinPE 11 Driver Pack" -Description "Downloading $cabFileName" -ErrorAction Stop -RetryInterval 60  -CustomHeaders "User-Agent:Bob"
+                    Start-BitsTransfer -Source $cabUrl -Destination $DownloadPath -DisplayName "Dell WinPE 11 Driver Pack" -Description "Downloading $cabFileName" -ErrorAction Stop -RetryInterval 60  -CustomHeaders "User-Agent:Bob"
                     
                     if (Test-Path $DownloadPath) {
                         $downloadSuccess = $true
@@ -401,138 +400,60 @@ function Get-DellCABDownloadUrl {
         return $null
     }
 }
-function Import-DriverPack {
+function Import-DellWinPEDriverPackBasic {
+    [CmdletBinding()]
     param (
-    [parameter(Mandatory=$true)]
-    [string]$MakeAlias,
-    [parameter(Mandatory=$true)]
-    [string]$ModelAlias,
-    [string]$FriendlyModel, # e.g., 'Latitude 5580' vs '07A8' ModelAlias
-    [string]$OSVer,  # e.g., 'Win10' or 'Win11'
-    [string]$URL,  # URL to download the driver pack
-    [string]$InputSourceFolder, #Downloaded Extracted Driver Pack Source Folder
-    [string]$DriverPackFileName = "", # If not provided, will be derived from URL
-    [string]$ArchiveSourceFolder = "D:\SourceRepo\DriverPacks",
-    [string]$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility',
-    [bool]$SkipArchive
+        [Parameter(Mandatory=$true)]
+        [string]$FullSourcePath,
+        [Parameter(Mandatory=$true)]
+        [string]$CabUrl
     )
-    
-    
-    if (-not $URL -and -not $InputSourceFolder) {
-        Write-Error "Either URL or InputSourceFolder are required parameters. Exiting."
-        Write-Host "Please provide either a URL to download the driver pack or a local InputSourceFolder path where the driver pack is already extracted." -ForegroundColor Yellow
-        return
-    }
-    
-    
-    #Ensure Source Folder exists
-    if (-not (Test-Path $ArchiveSourceFolder)) {
-        Write-Error "Source Folder $ArchiveSourceFolder does not exist. Exiting."
-        return
-    }
-    Import-Module $DeployRModulePath
-    #Get the latest version number of the Content Item
-    if ($InputSourceFolder -and (Test-Path $InputSourceFolder)) {
-        #Write-Host "  Using provided Input Source Folder: $InputSourceFolder"
-        $DriverPackFileName = (Get-Item $InputSourceFolder).Name
-        #Copy-Item -Path $InputSourceFolder -Destination "$DriverPackSourcePath\$DriverPackFileName" -Force
-    }
-    else {
-        if (-not $DriverPackFileName) {
-            $DriverPackFileName = $URL.Split("/")[-1]
-            $DriverPackFileFullName = $DriverPackFileName
-            #Get Extension
-            $DriverPackFileNameExt = $DriverPackFileName.Split(".")[-1]
-            
-            #Drop Extension
-            $DriverPackFileName = [System.IO.Path]::GetFileNameWithoutExtension($DriverPackFileName)
 
-        }
+    if (-not (Test-Path -Path $FullSourcePath)) {
+        New-Item -Path $FullSourcePath -ItemType Directory -Force | Out-Null
     }
 
-    if (-not $FriendlyModel) {
-        $FriendlyModel = $ModelAlias
-        $FolderModelAlias = $ModelAlias
-    }
-    else {
-        $FolderModelAlias = "$FriendlyModel - $ModelAlias"
-    }
-    $DriverPackSourcePath = "$ArchiveSourceFolder\$MakeAlias\$FolderModelAlias\$OSVer"
-    Write-Host "  File Name: $DriverPackFileFullName"
-    Write-Host "  Source Path: $DriverPackSourcePath"
-    #if (Get-DeployRContentItem | Where-Object {$_.Name -eq "Driver Pack - $MakeAlias - $ModelAlias - $OSVer" -and $_.description -match "$DriverPackFileName"}){
-    if (Get-DeployRContentItem | Where-Object {$_.Name -eq "Driver Pack - $MakeAlias - $FolderModelAlias - $OSVer"}){
-        Write-Host "  Driver Pack Content Item already exists for $MakeAlias - $FolderModelAlias - $OSVer" -ForegroundColor Yellow
-    }
-    else {
-        Write-Host "  Driver Pack Content Item does not exist for $MakeAlias - $FolderModelAlias - $OSVer. Creating new one."
-        #Create Source Folder Structure
-        New-Item -Path "$DriverPackSourcePath\Extracted" -ItemType Directory -Force | Out-Null
-        #Download the Driver Pack
-        if ($InputSourceFolder -and (Test-Path $InputSourceFolder)) {
-            Write-Host "  Using provided Input Source Folder: $InputSourceFolder"
-            $DriverPackFileName = (Get-Item $InputSourceFolder).Name
-            Copy-Item -Path $InputSourceFolder -Destination "$DriverPackSourcePath\Extracted" -Force
-        }
-        if (Test-Path "$DriverPackSourcePath\$DriverPackFileFullName") {
-            Write-Host "  Driver Pack already downloaded: $DriverPackFileFullName"
-        }
-        else {
-            write-Host "  Downloading Driver Pack to $DriverPackSourcePath\$DriverPackFileFullName"
-            Start-BitsTransfer -Source $URL -Destination "$DriverPackSourcePath\$DriverPackFileFullName" -RetryInterval 60 -RetryTimeout 3600   -CustomHeaders "User-Agent:Bob" -ErrorAction Stop
-        }
-        if (Test-Path "$DriverPackSourcePath\$DriverPackFileFullName") {
-            
-            if ($DriverPackFileNameExt -eq "zip"){
-                write-Host "  Extracting Zip Driver Pack to $DriverPackSourcePath\Extracted"
-                Expand-Archive -Path "$DriverPackSourcePath\$DriverPackFileFullName" -DestinationPath "$DriverPackSourcePath\Extracted" -Force
-            }
-            if ($DriverPackFileNameExt -eq "cab"){
+    $cabFileName = Split-Path -Path $CabUrl -Leaf
+    $cabPath = Join-Path -Path $FullSourcePath -ChildPath $cabFileName
+    $extractPath = Join-Path -Path $FullSourcePath -ChildPath 'Extracted'
 
-                Write-Host -Verbose "Expanding CAB Driver Pack to $DriverPackSourcePath\Extracted"
-                Expand -R "$DriverPackSourcePath\$DriverPackFileFullName" -F:* "$DriverPackSourcePath\Extracted" | Out-Null
-            }
-            if ($DriverPackFileNameExt -eq "exe") {
-                Write-Host "  Executing EXE Driver Pack to extract contents to $DriverPackSourcePath\Extracted"
-                $DriverPack = Get-Item -Path "$DriverPackSourcePath\$DriverPackFileFullName"
-                if ($DriverPack.VersionInfo.FileDescription -match 'Dell') {
-                    #Some EXE driver packs support silent extraction, others may not. This may need to be customized per manufacturer.
-                try {
-                    Start-Process -FilePath $DriverPack.FullName -ArgumentList "/s /e=`"$DriverPackSourcePath\Extracted`"" -Wait
-                } catch {
-                    Write-Error "Failed to extract Dell driver pack: $DriverPack"
-                }
-                }
-            }
-        }
-        else {
-            Write-Error "Failed to Download"
-            exit 1
-        }
-        #Extract the Driver Pack
-        
-        #Create DeployR Content Item for the Driver Pack
-        
-        $NewCI = New-DeployRContentItem -Name "Driver Pack - $MakeAlias - $FolderModelAlias - $OSVer" -Type Folder -Purpose DriverPack -Description "File: $DriverPackFileName"
-        $ContentId = $NewCI.id
-        $NewVersion = New-DeployRContentItemVersion -ContentItemId $ContentId -Description "Source: $DriverPackSourcePath" -DriverManufacturer $MakeAlias -DriverModel $ModelAlias -SourceFolder "$DriverPackSourcePath\Extracted"
-        $ContentVersion = $NewVersion.versionNo
-        #Upload the extracted driver pack to the DeployR Content Item
-        write-Host "  Uploading extracted Driver Pack to DeployR Content Item"
-        try {
-            $ciVersion = update-DeployRContentItemContent -ContentId $ContentId -ContentVersion $ContentVersion -SourceFolder "$DriverPackSourcePath\Extracted"
-            write-Host "  Successfully uploaded Driver Pack content to DeployR!  Content Item Info:" -ForegroundColor Green
-            write-Host "    CI driverManufacturer:   $($ciVersion.driverManufacturer)" -ForegroundColor DarkGray
-            write-Host "    CI driverModel:          $($ciVersion.driverModel)" -ForegroundColor DarkGray
-            write-Host "    CI ID:                   $($ciVersion.contentItemId), Version: $($ciVersion.versionNo)" -ForegroundColor DarkGray
-            write-Host "    CI path:                 $($ciVersion.relativePath)" -ForegroundColor DarkGray
-            write-Host "    CI Status:               $($ciVersion.status)" -ForegroundColor DarkGray
-            write-Host "    CI Size:                 $([math]::round($ciVersion.contentSize / 1MB, 2)) MB" -ForegroundColor DarkGray
-        }
-        catch {
-            Write-Error "  Failed to upload Driver Pack content to DeployR Content Item for $ManufacturerAlias - $FriendlyModel - $OSVer. Error: $_"
-        }
+    Write-Host "Downloading Dell CAB to $cabPath"
+    if (-not (Test-Path -Path $cabPath)) {
+        Start-BitsTransfer -Source $CabUrl -Destination $cabPath -RetryInterval 60 -RetryTimeout 3600 -CustomHeaders "User-Agent:Bob" -ErrorAction Stop
     }
+    else {
+        Write-Host "  CAB already exists, skipping download."
+    }
+
+    if (-not (Test-Path -Path $cabPath)) {
+        throw "CAB download failed. File not found at $cabPath"
+    }
+
+    Write-Host "Extracting CAB to $extractPath"
+    if (Test-Path -Path $extractPath) {
+        Remove-Item -Path $extractPath -Recurse -Force -ErrorAction Stop
+    }
+    New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
+    Expand -R $cabPath -F:* $extractPath | Out-Null
+
+    $contentName = 'Driver Pack - Dell - WinPE11 - Win11'
+    $contentItem = Get-DeployRContentItem | Where-Object { $_.Name -eq $contentName } | Select-Object -First 1
+
+    if (-not $contentItem) {
+        Write-Host "Creating DeployR DriverPack content item: $contentName"
+        $contentItem = New-DeployRContentItem -Name $contentName -Type Folder -Purpose DriverPack -Description "File: $cabFileName"
+    }
+    else {
+        Write-Host "Using existing DeployR content item: $contentName"
+    }
+
+    $newVersion = New-DeployRContentItemVersion -ContentItemId $contentItem.id -Description "Source: $FullSourcePath" -DriverManufacturer 'Dell' -DriverModel 'WinPE11' -SourceFolder $extractPath
+
+    Write-Host "Uploading extracted content to DeployR (ContentId: $($contentItem.id), Version: $($newVersion.versionNo))"
+    $ciVersion = Update-DeployRContentItemContent -ContentId $contentItem.id -ContentVersion $newVersion.versionNo -SourceFolder $extractPath
+
+    Write-Host "Driver Pack upload complete." -ForegroundColor Green
+    Write-Host "  CI ID: $($ciVersion.contentItemId), Version: $($ciVersion.versionNo), Size: $([math]::Round($ciVersion.contentSize / 1MB, 2)) MB" -ForegroundColor DarkGray
 }
 
 
@@ -551,7 +472,7 @@ if (Test-Path -path $FullSourcePath){
 }
 
 if ($DellWinPE) {
-    Import-DriverPack -MakeAlias "Dell" -ModelAlias "WinPE11" -FriendlyModel "WinPE 11 Driver Pack" -OSVer "Win11" -ArchiveSourceFolder $FullSourcePath -URL $DellWinPE.CABDownloadUrl
+    Import-DellWinPEDriverPackBasic -FullSourcePath $FullSourcePath -CabUrl $DellWinPE.CABDownloadUrl
 } else {
     Write-Warning "Could not find Dell WinPE Driver Pack URL."
 }
