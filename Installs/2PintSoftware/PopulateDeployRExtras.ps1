@@ -34,7 +34,7 @@ if ($useDDrive) {
 else {
     $driveLetter = 'C:'
 }
-$RootPath = "$driveLetter\DeployRSources"
+$RootPath = "$driveLetter\SourceRepo"
 write-host "RootPath is set to $RootPath"
 # Ensure the script runs with elevated privileges
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -412,7 +412,7 @@ function Import-DriverPack {
     [string]$URL,  # URL to download the driver pack
     [string]$InputSourceFolder, #Downloaded Extracted Driver Pack Source Folder
     [string]$DriverPackFileName = "", # If not provided, will be derived from URL
-    [string]$ArchiveSourceFolder = "D:\DeployRContentItems\Source\DriverPacks",
+    [string]$ArchiveSourceFolder = "D:\SourceRepo\DriverPacks",
     [string]$DeployRModulePath ='C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility',
     [bool]$SkipArchive
     )
@@ -540,14 +540,13 @@ function Import-DriverPack {
 #Export-ModuleMember -Function Get-DellWinPE11DriverPack
 
 #endregion
-
 $DellWinPE = Get-DellWinPE11DriverPack
 
-if (Test-Path -path $RootPath\WinPEContent\Drivers\Dell){
-    Write-Host "Dell Driver Pack already exists at $RootPath\WinPEContent\Drivers\Dell"
+if (Test-Path -path $RootPath\DriverPacks\X64\WinPE\Dell){
+    Write-Host "Dell Driver Pack already exists at $RootPath\DriverPacks\X64\WinPE\Dell"
 } else {
-    #New-Item -Path $RootPath\WinPEContent\Drivers\Dell -ItemType Directory -Force | Out-Null
-    Write-Host "Created directory for Dell Driver Pack at $RootPath\WinPEContent\Drivers\Dell"
+    #New-Item -Path $RootPath\DriverPacks\X64\WinPE\Dell -ItemType Directory -Force | Out-Null
+    Write-Host "Created directory for Dell Driver Pack at $RootPath\DriverPacks\X64\WinPE\Dell"
 }
 
 if ($DellWinPE) {
