@@ -541,16 +541,17 @@ function Import-DriverPack {
 
 #endregion
 $DellWinPE = Get-DellWinPE11DriverPack
+$FullSourcePath = "$RootPath\DriverPacks\X64\WinPE\Dell"
 
-if (Test-Path -path $RootPath\DriverPacks\X64\WinPE\Dell){
-    Write-Host "Dell Driver Pack already exists at $RootPath\DriverPacks\X64\WinPE\Dell"
+if (Test-Path -path $FullSourcePath){
+    Write-Host "Dell Driver Pack already exists at $FullSourcePath"
 } else {
-    #New-Item -Path $RootPath\DriverPacks\X64\WinPE\Dell -ItemType Directory -Force | Out-Null
-    Write-Host "Created directory for Dell Driver Pack at $RootPath\DriverPacks\X64\WinPE\Dell"
+    New-Item -Path $FullSourcePath -ItemType Directory -Force | Out-Null
+    Write-Host "Created directory for Dell Driver Pack at $FullSourcePath"
 }
 
 if ($DellWinPE) {
-    Import-DriverPack -MakeAlias "Dell" -ModelAlias "WinPE11" -FriendlyModel "WinPE 11 Driver Pack" -OSVer "Win11" -ArchiveSourceFolder $RootPath\DriverPacks\X64\WinPE\Dell -URL $DellWinPE.CABDownloadUrl
+    Import-DriverPack -MakeAlias "Dell" -ModelAlias "WinPE11" -FriendlyModel "WinPE 11 Driver Pack" -OSVer "Win11" -ArchiveSourceFolder $FullSourcePath -URL $DellWinPE.CABDownloadUrl
 } else {
     Write-Warning "Could not find Dell WinPE Driver Pack URL."
 }
