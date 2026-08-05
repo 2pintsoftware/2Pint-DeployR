@@ -210,13 +210,15 @@ function Set-DeployRServerConfiguration  {
     
     # Set registry values
     Set-ItemProperty -Path $regPath -Name "CertificateThumbprint" -Value "$Thumbprint" -Type String
-    Set-ItemProperty -Path $regPath -Name "ConnectionString" -Value "$ConnectionString" -Type String
+    #Set-ItemProperty -Path $regPath -Name "ConnectionString" -Value "$ConnectionString" -Type String
     Set-ItemProperty -Path $regPath -Name "ClientURL" -Value "$ClientURL" -Type String
     Set-ItemProperty -Path $regPath -Name "JoinInfrastructure" -Value "$JoinInfrastructure" -Type String
     Set-ItemProperty -Path $regPath -Name "StifleRServerApiUrl" -Value "$StifleRServerApiUrl" -Type String
     Set-ItemProperty -Path $regPath -Name "BypassAuthentication" -Value "True" -Type String
     Set-ItemProperty -Path $regPath -Name "BypassLocalAuthentication" -Value "True" -Type String
     Set-ItemProperty -Path $regPath -Name "ClientPasscode" -Value "P@ssw0rd" -Type String
+    Set-ItemProperty -Path $regPath -Name "SqlConnectionBy" -Value "ServerInstanceAndDB" -Type String
+    
     
     #Test for D Volume and ensure it's a local disk, NTFS formatted, and create DeployRContentLib folder
     # If D: is not suitable, fall back to C:

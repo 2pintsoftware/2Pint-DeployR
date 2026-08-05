@@ -550,7 +550,7 @@ if (Test-Path -path $RootPath\DriverPacks\X64\WinPE\Dell){
 }
 
 if ($DellWinPE) {
-    Import-DriverPack -MakeAlias "Dell" -ModelAlias "WinPE11" -FriendlyModel "WinPE 11 Driver Pack" -OSVer "Win11" -ArchiveSourceFolder $RootPath\WinPEContent\Drivers -URL $DellWinPE.CABDownloadUrl
+    Import-DriverPack -MakeAlias "Dell" -ModelAlias "WinPE11" -FriendlyModel "WinPE 11 Driver Pack" -OSVer "Win11" -ArchiveSourceFolder $RootPath\DriverPacks\X64\WinPE\Dell -URL $DellWinPE.CABDownloadUrl
 } else {
     Write-Warning "Could not find Dell WinPE Driver Pack URL."
 }
