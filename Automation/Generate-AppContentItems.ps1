@@ -30,10 +30,15 @@ Updates
 #>
 
 # Configure root download path
-$RootPath = "D:\DeployRSources\Applications"
+$RootPath = "D:\SourceRepo\Applications"
 $ForceOverwriteDownloads = $true
 $Tags = @('FrontEnd','2PintLabs')
 $AppDescription = '2PintLabs Script Generated Application'
+
+if (-not (Test-Path -Path $RootPath -PathType Container)) {
+    Write-Error "Root path does not exist: $RootPath. Update the `$RootPath value near the top of this script to point to an existing folder, then run the script again."
+    exit 1
+}
 
 # Check for Administrator role
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
