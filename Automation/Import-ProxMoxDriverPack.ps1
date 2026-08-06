@@ -1,3 +1,29 @@
+<#
+.SYNOPSIS
+Downloads the Proxmox VirtIO ISO to the local driver source tree, extracts it, and publishes it as a DeployR Driver Pack.
+
+.DESCRIPTION
+This script does not install/apply drivers to the current OS.
+It only stages source files and uploads them into a DeployR content item.
+
+Workflow:
+1. Validate local source root and administrative rights.
+2. Connect to DeployR using local DeployR.Utility + passcode.
+3. Download virtio-win.iso to the Proxmox WinPE source folder.
+4. Mount the ISO and copy all contents to an Extracted folder.
+5. Create (or reuse) the DeployR content item and upload extracted content as a new version.
+
+Local content layout created/used:
+    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\virtio-win.iso
+    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\Extracted\*
+
+DeployR content item used:
+    Name: Driver Pack - Proxmox - VirtIO
+    Type: Folder
+    Purpose: DriverPack
+    Version behavior: each successful run creates a new version and uploads current Extracted content.
+#>
+
 # Configure root download path
 
 $RootPath = "D:\SourceRepo\DriverPacks\X64\WinPE"
@@ -22,6 +48,7 @@ function Import-ProxmoxVirtIODriverPack {
         New-Item -Path $SourcePath -ItemType Directory -Force | Out-Null
     }
 
+    # Keep both the ISO and extracted files under the same Proxmox source folder.
     $isoFileName = Split-Path -Path $IsoUrl -Leaf
     $isoPath = Join-Path -Path $SourcePath -ChildPath $isoFileName
     $extractPath = Join-Path -Path $SourcePath -ChildPath 'Extracted'
@@ -46,6 +73,7 @@ function Import-ProxmoxVirtIODriverPack {
     }
 
     Write-Host "Extracting ISO contents to $extractPath" -ForegroundColor Cyan
+    # Rebuild extracted content each run so upload reflects current ISO contents.
     if (Test-Path -Path $extractPath) {
         Remove-Item -Path $extractPath -Recurse -Force -ErrorAction Stop
     }
@@ -83,6 +111,7 @@ function Import-ProxmoxVirtIODriverPack {
         Write-Host "Using existing DeployR content item: $ContentName" -ForegroundColor Yellow
     }
 
+    # Publish extracted files as a new content version every run.
     $newVersion = New-DeployRContentItemVersion -ContentItemId $contentItem.id -Description "Source: $SourcePath" -DriverManufacturer 'Proxmox' -DriverModel 'VirtIO' -SourceFolder $extractPath
     $ciVersion = Update-DeployRContentItemContent -ContentId $contentItem.id -ContentVersion $newVersion.versionNo -SourceFolder $extractPath
 
@@ -151,6 +180,6 @@ if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.
     }
     
 } else {
-    Write-Host "DeployR.Utility module not found. Please Where DeployR Server is installed to and update paths."
+    Write-Host "DeployR.Utility module not found. Please ensure DeployR Client is installed and update module paths if needed."
 }
 
