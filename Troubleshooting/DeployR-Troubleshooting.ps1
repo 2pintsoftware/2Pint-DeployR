@@ -58,8 +58,8 @@ To DO
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
 
 #Keep this updated as needed 
-$DotNetMinVersion = '10.0.3'
-$PowerShellMinVersion = '7.6.3'
+$DotNetMinVersion = '10.0.10'
+$PowerShellMinVersion = '7.6.4'
 $ADKVersion = '10.1.26100.2454'
 
 # Check for Administrator role
