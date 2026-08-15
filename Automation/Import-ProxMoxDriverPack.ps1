@@ -11,17 +11,19 @@ Workflow:
 2. Connect to DeployR using local DeployR.Utility + passcode.
 3. Download virtio-win.iso to the Proxmox WinPE source folder.
 4. Mount the ISO and copy all contents to an Extracted folder.
-5. Create (or reuse) the DeployR content item and upload extracted content as a new version.
+5. Scan Extracted for w11\amd64 folders and stage them into ProxX64DP.
+6. Create (or reuse) the DeployR content item and upload ProxX64DP content as a new version.
 
 Local content layout created/used:
     D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\virtio-win.iso
     D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\Extracted\*
+    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\ProxX64DP\*
 
 DeployR content item used:
     Name: Driver Pack - Proxmox - VirtIO
     Type: Folder
     Purpose: DriverPack
-    Version behavior: each successful run creates a new version and uploads current Extracted content.
+    Version behavior: each successful run creates a new version and uploads current ProxX64DP content.
 #>
 
 # Configure root download path
@@ -52,6 +54,7 @@ function Import-ProxmoxVirtIODriverPack {
     $isoFileName = Split-Path -Path $IsoUrl -Leaf
     $isoPath = Join-Path -Path $SourcePath -ChildPath $isoFileName
     $extractPath = Join-Path -Path $SourcePath -ChildPath 'Extracted'
+    $proxX64DpPath = Join-Path -Path $SourcePath -ChildPath 'ProxX64DP'
 
     Write-Host "Downloading Proxmox VirtIO ISO to $isoPath" -ForegroundColor Cyan
     if (-not (Test-Path -Path $isoPath -PathType Leaf)) {
@@ -102,6 +105,31 @@ function Import-ProxmoxVirtIODriverPack {
         }
     }
 
+    Write-Host "Building curated x64 driver source at $proxX64DpPath" -ForegroundColor Cyan
+    if (Test-Path -Path $proxX64DpPath) {
+        Remove-Item -Path $proxX64DpPath -Recurse -Force -ErrorAction Stop
+    }
+    New-Item -Path $proxX64DpPath -ItemType Directory -Force | Out-Null
+
+    $w11Amd64Folders = Get-ChildItem -Path $extractPath -Directory -Recurse | Where-Object {
+        $_.Name -ieq 'amd64' -and (Split-Path -Path $_.Parent.FullName -Leaf) -ieq 'w11'
+    }
+
+    if (-not $w11Amd64Folders) {
+        throw "No w11\\amd64 folders found under $extractPath"
+    }
+
+    foreach ($folder in $w11Amd64Folders) {
+        # Preserve the full path below Extracted (e.g. pvpanic\w11\amd64).
+        $relativeAmd64Path = [System.IO.Path]::GetRelativePath($extractPath, $folder.FullName)
+        $destinationFolder = Join-Path -Path $proxX64DpPath -ChildPath $relativeAmd64Path
+
+        New-Item -Path $destinationFolder -ItemType Directory -Force | Out-Null
+        Copy-Item -Path (Join-Path -Path $folder.FullName -ChildPath '*') -Destination $destinationFolder -Recurse -Force -ErrorAction Stop
+    }
+
+    Write-Host "  Collected $($w11Amd64Folders.Count) w11\\amd64 folder(s) into ProxX64DP." -ForegroundColor DarkGray
+
     $contentItem = Get-DeployRContentItem | Where-Object { $_.Name -eq $ContentName } | Select-Object -First 1
     if (-not $contentItem) {
         Write-Host "Creating DeployR content item: $ContentName" -ForegroundColor Cyan
@@ -111,9 +139,9 @@ function Import-ProxmoxVirtIODriverPack {
         Write-Host "Using existing DeployR content item: $ContentName" -ForegroundColor Yellow
     }
 
-    # Publish extracted files as a new content version every run.
-    $newVersion = New-DeployRContentItemVersion -ContentItemId $contentItem.id -Description "Source: $SourcePath" -DriverManufacturer 'Proxmox' -DriverModel 'VirtIO' -SourceFolder $extractPath
-    $ciVersion = Update-DeployRContentItemContent -ContentId $contentItem.id -ContentVersion $newVersion.versionNo -SourceFolder $extractPath
+    # Publish curated x64 driver files as a new content version every run.
+    $newVersion = New-DeployRContentItemVersion -ContentItemId $contentItem.id -Description "Source: $proxX64DpPath" -DriverManufacturer 'Proxmox' -DriverModel 'Virtual Machine' -SourceFolder $proxX64DpPath
+    $ciVersion = Update-DeployRContentItemContent -ContentId $contentItem.id -ContentVersion $newVersion.versionNo -SourceFolder $proxX64DpPath
 
     Write-Host "Driver Pack upload complete." -ForegroundColor Green
     Write-Host "  CI ID: $($ciVersion.contentItemId), Version: $($ciVersion.versionNo), Size: $([math]::Round($ciVersion.contentSize / 1MB, 2)) MB" -ForegroundColor DarkGray
