@@ -142,7 +142,9 @@ $TargetBCCacheBytes = [int64][math]::Max($Calculated25PercentBytes, $MinBCCacheB
 Write-Output ""
 Write-Output "Evaluating StifleR Client BCCacheSize setting..."
 if (Test-Path -Path $StifleRSettingsRegPath) {
-    $CurrentBCCacheValue = Get-ItemPropertyValue -Path $StifleRSettingsRegPath -Name $StifleRBCCacheValueName -ErrorAction SilentlyContinue
+    $StifleRRegValues = Get-Item -Path $StifleRSettingsRegPath
+    $CurrentBCCacheValue = $StifleRRegValues.GetValue($StifleRBCCacheValueName, $null)
+    #$CurrentBCCacheValue = Get-ItemPropertyValue -Path $StifleRSettingsRegPath -Name $StifleRBCCacheValueName -ErrorAction SilentlyContinue
     Write-Output "  Target BCCacheSize (bytes): $TargetBCCacheBytes"
 
     if ($null -eq $CurrentBCCacheValue) {
