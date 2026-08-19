@@ -1,213 +1,563 @@
 <#
-.SYNOPSIS
-Downloads the Proxmox VirtIO ISO to the local driver source tree, extracts it, and publishes it as a DeployR Driver Pack.
+    .SYNOPSIS
+    Stages the Proxmox VirtIO driver ISO, breaks the drivers apart per detected operating system, and publishes one DeployR driver pack content item per operating system.
 
-.DESCRIPTION
-This script does not install/apply drivers to the current OS.
-It only stages source files and uploads them into a DeployR content item.
+    .DESCRIPTION
+    This script does not install or apply drivers to the currently running operating system. It only stages driver source files and uploads them into DeployR content items.
 
-Workflow:
-1. Validate local source root and administrative rights.
-2. Connect to DeployR using local DeployR.Utility + passcode.
-3. Download virtio-win.iso to the Proxmox WinPE source folder.
-4. Mount the ISO and copy all contents to an Extracted folder.
-5. Scan Extracted for w11\amd64 folders and stage them into ProxX64DP.
-6. Create (or reuse) the DeployR content item and upload ProxX64DP content as a new version.
+    Workflow:
+    1. Validate administrative rights and the local source root.
+    2. Import the local DeployR.Utility module and connect to DeployR using the client passcode (registry first, passcode file second).
+    3. Locate the latest ISO within the Proxmox source folder regardless of its file name, or download the ISO when none exists.
+    4. Mount the ISO and copy all contents to an Extracted folder (rebuilt on every run).
+    5. Detect the operating system folder names from the extracted driver layout (driver\os\architecture) and filter them with the OSInclusionExpression and OSExclusionExpression regular expressions.
+    6. For each included operating system, stage the matching driver folders into a per operating system driver pack folder and publish it into its own DeployR content item. Newly created content items always receive their initial version, while existing content items only receive a new version when the AddNewVersions parameter is specified.
 
-Local content layout created/used:
-    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\virtio-win.iso
-    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\Extracted\*
-    D:\SourceRepo\DriverPacks\X64\WinPE\Proxmox\ProxX64DP\*
+    Local content layout created/used (relative to the source root):
+        Proxmox\<AnyName>.iso
+        Proxmox\Extracted\*
+        Proxmox\DriverPacks\<OSName>\*
 
-DeployR content item used:
-    Name: Driver Pack - Proxmox - VirtIO
-    Type: Folder
-    Purpose: DriverPack
-    Version behavior: each successful run creates a new version and uploads current ProxX64DP content.
+    DeployR content items used (one per included operating system):
+        Name: <ContentNamePrefix> - <OSName> (for example "Driver Pack - Proxmox - VirtIO - w11")
+        Type: Folder
+        Purpose: DriverPack
+        Version behavior: newly created content items receive their initial version automatically, and existing content items only receive a new version when the AddNewVersions parameter is specified.
+
+    .PARAMETER RootDirectory
+    The existing local source root directory. The "Proxmox" source folder structure is created beneath this directory.
+
+    .PARAMETER DownloadURL
+    The URL where the VirtIO driver ISO is located. The download only occurs when no ISO already exists within the Proxmox source folder (any ISO file name is accepted and the latest one is used).
+
+    .PARAMETER OSInclusionExpression
+    A regular expression that determines which detected operating system folder names are included. The default expression includes every detected operating system.
+
+    .PARAMETER OSExclusionExpression
+    A regular expression that determines which detected operating system folder names are excluded. The default expression excludes nothing.
+
+    .PARAMETER ArchitectureInclusionExpression
+    A regular expression that determines which processor architecture folder names are included within each driver pack.
+
+    .PARAMETER ContentNamePrefix
+    The DeployR content item name prefix. The detected operating system folder name is appended to form the full content item name.
+
+    .PARAMETER DriverManufacturer
+    The driver manufacturer (make) recorded on each published content item version.
+
+    .PARAMETER DriverModel
+    The driver model recorded on each published content item version.
+
+    .PARAMETER AddNewVersions
+    Publish a new content item version for content items that already exist. Without this switch, existing content items are left untouched and only newly created content items receive their initial version.
+
+    .PARAMETER PasscodePath
+    The path to a text file containing the DeployR client passcode. Empty by default and dynamically detected: the passcode is read from the registry first, then from "DeployRPasscode.txt" at the root of the drive containing the source root directory. Explicitly supplying this parameter overrides the dynamic detection.
+
+    .EXAMPLE
+    powershell.exe -ExecutionPolicy Bypass -NoProfile -NoLogo -File ".\Import-ProxMoxDriverPack.ps1"
+
+    .EXAMPLE
+    pwsh.exe -ExecutionPolicy Bypass -NoProfile -NoLogo -File ".\Import-ProxMoxDriverPack.ps1" -OSInclusionExpression '.*(w11|2k25).*' -OSExclusionExpression '.*(w7|xp).*' -AddNewVersions
+
+    .EXAMPLE
+    .\Import-ProxMoxDriverPack.ps1 -RootDirectory 'D:\SourceRepo\DriverPacks\X64\WinPE' -ContentNamePrefix 'Driver Pack - Proxmox - VirtIO'
+
+    .NOTES
+    The operating system folder names within the VirtIO ISO follow the vendor naming convention, such as w10, w11, 2k16, 2k19, 2k22, and 2k25.
+
+    Requires administrator rights and an installed DeployR client (DeployR.Utility module).
+
+    .LINK
+    https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/
 #>
 
-# Configure root download path
+[CmdletBinding()]
+  Param
+    (
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('Root', 'RD')]
+        [System.IO.DirectoryInfo]$RootDirectory = 'D:\SourceRepo\DriverPacks\X64\WinPE',
 
-$RootPath = "D:\SourceRepo\DriverPacks\X64\WinPE"
-$ProxmoxSourcePath = Join-Path -Path $RootPath -ChildPath 'Proxmox'
-$ProxmoxIsoUrl = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso'
-$ProxmoxContentName = 'Driver Pack - Proxmox - VirtIO'
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('URI', 'URL', 'DURL')]
+        [System.URI]$DownloadURL = 'https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso',
 
-function Import-ProxmoxVirtIODriverPack {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$SourcePath,
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('OSIE')]
+        [Regex]$OSInclusionExpression = '.*(win11|).*',
 
-        [Parameter(Mandatory)]
-        [string]$IsoUrl,
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('OSEE')]
+        [Regex]$OSExclusionExpression = '.*(Exclude1|Exclude2).*',
 
-        [Parameter(Mandatory)]
-        [string]$ContentName
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('AIE')]
+        [Regex]$ArchitectureInclusionExpression = '.*(amd64).*',
+
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('CNP')]
+        [String]$ContentNamePrefix = 'Driver Pack - Proxmox - VirtIO',
+
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('Make', 'Manufacturer')]
+        [String]$DriverManufacturer = 'Proxmox',
+
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('Model')]
+        [String]$DriverModel = 'Virtual Machine',
+
+        [Parameter(Mandatory=$False)]
+        [Alias('ANV')]
+        [Switch]$AddNewVersions,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('PP')]
+        [System.IO.FileInfo]$PasscodePath
     )
 
-    if (-not (Test-Path -Path $SourcePath -PathType Container)) {
-        New-Item -Path $SourcePath -ItemType Directory -Force | Out-Null
-    }
+Try
+  {
+      #region Define Default Action Preferences
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'Continue'
+      #endregion
 
-    # Keep both the ISO and extracted files under the same Proxmox source folder.
-    $isoFileName = Split-Path -Path $IsoUrl -Leaf
-    $isoPath = Join-Path -Path $SourcePath -ChildPath $isoFileName
-    $extractPath = Join-Path -Path $SourcePath -ChildPath 'Extracted'
-    $proxX64DpPath = Join-Path -Path $SourcePath -ChildPath 'ProxX64DP'
+      #region Set the default exit code for the script
+        [System.Environment]::ExitCode = 0
+      #endregion
 
-    Write-Host "Downloading Proxmox VirtIO ISO to $isoPath" -ForegroundColor Cyan
-    if (-not (Test-Path -Path $isoPath -PathType Leaf)) {
-        try {
-            Start-BitsTransfer -Source $IsoUrl -Destination $isoPath -RetryInterval 60 -RetryTimeout 3600 -CustomHeaders 'User-Agent:Bob' -ErrorAction Stop
-        }
-        catch {
-            Write-Warning "BITS download failed or was redirected: $($_.Exception.Message)"
-            Write-Host "  Falling back to Invoke-WebRequest..." -ForegroundColor Yellow
-            Invoke-WebRequest -Uri $IsoUrl -OutFile $isoPath -Headers @{ 'User-Agent' = 'Bob' } -MaximumRedirection 10 -AllowInsecureRedirect -ErrorAction Stop
-        }
-    }
-    else {
-        Write-Host "  ISO already exists, skipping download." -ForegroundColor DarkGray
-    }
+      #region Validate administrative rights
+        $Identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $Principal = New-Object -TypeName 'System.Security.Principal.WindowsPrincipal' -ArgumentList ($Identity)
+        $IsElevated = $Principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 
-    if (-not (Test-Path -Path $isoPath -PathType Leaf)) {
-        throw "ISO download failed. File not found at $isoPath"
-    }
+        Switch ($IsElevated)
+          {
+              {($_ -eq $False)}
+                {
+                    Throw "This script must be run as an administrator."
+                }
+          }
+      #endregion
 
-    Write-Host "Extracting ISO contents to $extractPath" -ForegroundColor Cyan
-    # Rebuild extracted content each run so upload reflects current ISO contents.
-    if (Test-Path -Path $extractPath) {
-        Remove-Item -Path $extractPath -Recurse -Force -ErrorAction Stop
-    }
-    New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
+      #region Validate the source root and define the directory structure
+        Switch ([System.IO.Directory]::Exists($RootDirectory.FullName))
+          {
+              {($_ -eq $False)}
+                {
+                    Throw "The root directory `"$($RootDirectory.FullName)`" does not exist. Update the RootDirectory parameter to point to an existing folder and run the script again."
+                }
+          }
 
-    $mountedImage = $null
-    try {
-        $mountedImage = Mount-DiskImage -ImagePath $isoPath -PassThru -ErrorAction Stop
-        $mountedVolume = $mountedImage | Get-Volume -ErrorAction Stop
+        $DriverSourceDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($RootDirectory.FullName, 'Proxmox')
+        $ExtractedDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'Extracted')
+        $DriverPacksDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'DriverPacks')
 
-        if (-not $mountedVolume.DriveLetter) {
-            throw "Mounted ISO did not expose a drive letter."
-        }
+        Switch ([System.IO.Directory]::Exists($DriverSourceDirectory.FullName))
+          {
+              {($_ -eq $False)}
+                {
+                    $Null = [System.IO.Directory]::CreateDirectory($DriverSourceDirectory.FullName)
+                }
+          }
+      #endregion
 
-        $mountedDriveRoot = "$($mountedVolume.DriveLetter):\"
-        Copy-Item -Path "$mountedDriveRoot*" -Destination $extractPath -Recurse -Force -ErrorAction Stop
-    }
-    finally {
-        if ($mountedImage) {
-            try {
-                Dismount-DiskImage -ImagePath $isoPath -ErrorAction Stop | Out-Null
+      #region Import the DeployR.Utility module
+        $DeployRModulePathList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+          $DeployRModulePathList.Add("$($Env:ProgramFiles)\2Pint Software\DeployR\Client\PSModules\DeployR.Utility")
+          $DeployRModulePathList.Add('DeployR.Utility')
+
+        $DeployRModuleImported = $False
+
+        For ($DeployRModulePathListIndex = 0; $DeployRModulePathListIndex -lt $DeployRModulePathList.Count; $DeployRModulePathListIndex++)
+          {
+              $DeployRModulePath = $DeployRModulePathList[$DeployRModulePathListIndex]
+
+              $DeployRModuleAvailable = ([System.IO.Directory]::Exists($DeployRModulePath) -eq $True) -or ($Null -ine (Get-Module -ListAvailable -Name ($DeployRModulePath) -ErrorAction SilentlyContinue))
+
+              Switch (($DeployRModuleAvailable -eq $True) -and ($DeployRModuleImported -eq $False))
+                {
+                    {($_ -eq $True)}
+                      {
+                          Write-Verbose -Message "Attempting to import the DeployR.Utility module. Please Wait... [Path: $($DeployRModulePath)]" -Verbose
+
+                          $ImportModuleParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                            $ImportModuleParameters.Name = $DeployRModulePath
+                            $ImportModuleParameters.Force = $True
+                            $ImportModuleParameters.DisableNameChecking = $True
+                            $ImportModuleParameters.Verbose = $False
+
+                          $Null = Import-Module @ImportModuleParameters
+
+                          $DeployRModuleImported = $True
+                      }
+                }
+          }
+
+        Switch ($DeployRModuleImported)
+          {
+              {($_ -eq $False)}
+                {
+                    Throw "The DeployR.Utility module could not be found. Please ensure that the DeployR client is installed."
+                }
+          }
+      #endregion
+
+      #region Connect to DeployR using the client passcode (Registry first, passcode file second)
+        [System.IO.FileInfo]$DeployRSettingsRegistryPath = "$($Env:SystemDrive)"
+
+        $DeployRGeneralSettingsPath = 'HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings'
+
+        #Determine the passcode file path dynamically when one was not explicitly supplied (The root of the drive containing the source root directory)
+          [Boolean]$PasscodePathSupplied = $PSBoundParameters.ContainsKey('PasscodePath')
+
+          Switch ($PasscodePathSupplied)
+            {
+                {($_ -eq $False)}
+                  {
+                      $PasscodePath = [System.IO.FileInfo][System.IO.Path]::Combine($RootDirectory.Root.FullName, 'DeployRPasscode.txt')
+                  }
             }
-            catch {
-                Write-Warning "Failed to dismount ISO $($isoPath): $($_.Exception.Message)"
-            }
+
+        $ClientPasscode = $Null
+
+        Switch ($True)
+          {
+              {($PasscodePathSupplied -eq $True) -and ([System.IO.File]::Exists($PasscodePath.FullName))}
+                {
+                    Write-Verbose -Message "Attempting to read the DeployR client passcode from the explicitly supplied passcode file. Please Wait... [Path: $($PasscodePath.FullName)]" -Verbose
+
+                    $ClientPasscode = [System.IO.File]::ReadAllText($PasscodePath.FullName).Trim()
+
+                    Break
+                }
+
+              {(Test-Path -Path ($DeployRGeneralSettingsPath))}
+                {
+                    Write-Verbose -Message "Attempting to read the DeployR client passcode from the registry. Please Wait... [Path: $($DeployRGeneralSettingsPath)]" -Verbose
+
+                    $ClientPasscode = (Get-Item -Path ($DeployRGeneralSettingsPath)).GetValue('ClientPasscode')
+
+                    Break
+                }
+
+              {([System.IO.File]::Exists($PasscodePath.FullName))}
+                {
+                    Write-Verbose -Message "Attempting to read the DeployR client passcode from the dynamically detected passcode file. Please Wait... [Path: $($PasscodePath.FullName)]" -Verbose
+
+                    $ClientPasscode = [System.IO.File]::ReadAllText($PasscodePath.FullName).Trim()
+
+                    Break
+                }
+
+              Default
+                {
+                    Throw "The DeployR client passcode could not be found within the registry or within `"$($PasscodePath.FullName)`"."
+                }
+          }
+
+        Write-Verbose -Message "Attempting to connect to DeployR. Please Wait..." -Verbose
+
+        $ConnectDeployRParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+          $ConnectDeployRParameters.Passcode = $ClientPasscode
+          $ConnectDeployRParameters.ErrorAction = [System.Management.Automation.ActionPreference]::Stop
+
+        $Null = Connect-DeployR @ConnectDeployRParameters
+
+        Write-Verbose -Message "Successfully connected to DeployR." -Verbose
+      #endregion
+
+      #region Stage the ISO (Any existing ISO within the source folder is used as-is regardless of its file name, otherwise the ISO is downloaded)
+        $ExistingISOList = Get-ChildItem -Path ($DriverSourceDirectory.FullName) -Filter '*.iso' -Force -ErrorAction SilentlyContinue | Where-Object {($_ -is [System.IO.FileInfo])}
+
+        $ExistingISOListCount = ($ExistingISOList | Measure-Object).Count
+
+        Switch ($ExistingISOListCount -gt 0)
+          {
+              {($_ -eq $True)}
+                {
+                    $ISOPath = $ExistingISOList | Sort-Object -Property @('LastWriteTime') -Descending | Select-Object -First 1
+
+                    Write-Verbose -Message "Found $($ExistingISOListCount) existing ISO image(s) within `"$($DriverSourceDirectory.FullName)`". The download will be skipped. [Latest Existing ISO Image: $($ISOPath.FullName)]" -Verbose
+                }
+
+              Default
+                {
+                    $ISOPath = [System.IO.FileInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, [System.IO.Path]::GetFileName($DownloadURL.OriginalString))
+
+                    Write-Verbose -Message "Attempting to download `"$($DownloadURL.OriginalString)`" to `"$($ISOPath.FullName)`". Please Wait..." -Verbose
+
+                    $WebClient = New-Object -TypeName 'System.Net.WebClient'
+                      $WebClient.UseDefaultCredentials = $True
+
+                    Try
+                      {
+                          $Null = $WebClient.DownloadFile($DownloadURL.OriginalString, $ISOPath.FullName)
+                      }
+                    Finally
+                      {
+                          Try {$Null = $WebClient.Dispose()} Catch {}
+                      }
+
+                    $ISOPath = Get-Item -Path ($ISOPath.FullName) -Force
+
+                    Write-Verbose -Message "The download completed successfully. [Size: $([System.Math]::Round($ISOPath.Length / 1MB, 2)) MB]" -Verbose
+                }
+          }
+      #endregion
+
+      #region Extract the ISO contents (Rebuilt on every run so that the driver packs reflect the current ISO contents)
+        Write-Verbose -Message "Attempting to extract the ISO contents to `"$($ExtractedDirectory.FullName)`". Please Wait..." -Verbose
+
+        Switch ([System.IO.Directory]::Exists($ExtractedDirectory.FullName))
+          {
+              {($_ -eq $True)}
+                {
+                    $Null = Remove-Item -Path ($ExtractedDirectory.FullName) -Recurse -Force -Confirm:$False
+                }
+          }
+
+        $Null = [System.IO.Directory]::CreateDirectory($ExtractedDirectory.FullName)
+
+        Try
+          {
+              $ISOImageInfo = Mount-DiskImage -ImagePath ($ISOPath.FullName) -StorageType ISO -Access ReadOnly -PassThru
+
+              $ISOImageVolume = $ISOImageInfo | Get-Volume
+
+              Switch (([String]::IsNullOrEmpty($ISOImageVolume.DriveLetter) -eq $True) -or ([String]::IsNullOrWhiteSpace($ISOImageVolume.DriveLetter) -eq $True))
+                {
+                    {($_ -eq $True)}
+                      {
+                          Throw "The mounted ISO image did not expose a drive letter."
+                      }
+                }
+
+              $Null = Copy-Item -Path "$($ISOImageVolume.DriveLetter):\*" -Destination "$($ExtractedDirectory.FullName)\" -Recurse -Force
+          }
+        Finally
+          {
+              $ISOImageInfo = Get-DiskImage -ImagePath ($ISOPath.FullName) -StorageType ISO
+
+              Switch ($ISOImageInfo.Attached)
+                {
+                    {($_ -eq $True)}
+                      {
+                          Write-Verbose -Message "Attempting to dismount the previously mounted ISO image. Please Wait... [ISO Image Path: $($ISOPath.FullName)]" -Verbose
+
+                          $Null = Try {Dismount-DiskImage -ImagePath ($ISOPath.FullName) -StorageType ISO} Catch {}
+                      }
+                }
+          }
+      #endregion
+
+      #region Detect the operating system folder names from the extracted driver layout (driver\os\architecture)
+        Write-Verbose -Message "Attempting to detect the operating system folder names within `"$($ExtractedDirectory.FullName)`". Please Wait..." -Verbose
+
+        $ArchitectureDirectoryList = Get-ChildItem -Path ($ExtractedDirectory.FullName) -Directory -Recurse -Force | Where-Object {($_.Name -imatch $ArchitectureInclusionExpression.ToString()) -and ($Null -ine $_.Parent) -and ($_.Parent.FullName -ine $ExtractedDirectory.FullName)}
+
+        $DetectedOSNameList = $ArchitectureDirectoryList | ForEach-Object {$_.Parent.Name} | Sort-Object -Unique
+
+        $DetectedOSNameListCount = ($DetectedOSNameList | Measure-Object).Count
+
+        Write-Verbose -Message "Detected $($DetectedOSNameListCount) operating system folder name(s): $($DetectedOSNameList -Join ', ')" -Verbose
+
+        $IncludedOSNameList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+
+        ForEach ($DetectedOSName In $DetectedOSNameList)
+          {
+              Switch (($DetectedOSName -imatch $OSInclusionExpression.ToString()) -and ($DetectedOSName -inotmatch $OSExclusionExpression.ToString()))
+                {
+                    {($_ -eq $True)}
+                      {
+                          $IncludedOSNameList.Add($DetectedOSName)
+                      }
+
+                    Default
+                      {
+                          Write-Verbose -Message "Skipping operating system `"$($DetectedOSName)`". [Reason: The name did not match the inclusion expression or matched the exclusion expression.]" -Verbose
+                      }
+                }
+          }
+
+        Write-Verbose -Message "$($IncludedOSNameList.Count) operating system(s) will be processed: $($IncludedOSNameList -Join ', ')" -Verbose
+
+        Switch ($IncludedOSNameList.Count -gt 0)
+          {
+              {($_ -eq $False)}
+                {
+                    Throw "No operating system folder names matched the specified inclusion and exclusion expressions. [Inclusion: $($OSInclusionExpression.ToString())] [Exclusion: $($OSExclusionExpression.ToString())]"
+                }
+          }
+      #endregion
+
+      #region Retrieve the existing DeployR content item list one time before processing
+        $ExistingContentItemList = Get-DeployRContentItem
+      #endregion
+
+      #region Create one driver pack per included operating system and publish each as its own DeployR content item version
+        $IncludedOSNameListCounter = 1
+
+        For ($IncludedOSNameListIndex = 0; $IncludedOSNameListIndex -lt $IncludedOSNameList.Count; $IncludedOSNameListIndex++)
+          {
+              Try
+                {
+                    $OSName = $IncludedOSNameList[$IncludedOSNameListIndex]
+
+                    $ProgressPercentage = [System.Math]::Round((($IncludedOSNameListCounter / $IncludedOSNameList.Count) * 100), 2)
+
+                    $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                      $WriteProgressParameters.Activity = "Processing driver pack $($IncludedOSNameListCounter) of $($IncludedOSNameList.Count). Please Wait... [Operating System: $($OSName)]"
+                      $WriteProgressParameters.Status = "Progress Percentage: $($ProgressPercentage)%"
+                      $WriteProgressParameters.PercentComplete = $ProgressPercentage
+                      $WriteProgressParameters.CurrentOperation = $OSName
+
+                    Write-Progress @WriteProgressParameters
+
+                    Write-Verbose -Message "Attempting to process driver pack $($IncludedOSNameListCounter) of $($IncludedOSNameList.Count). Please Wait... [Operating System: $($OSName)]" -Verbose
+
+                    #region Stage the matching driver folders into the per operating system driver pack folder
+                      $DriverPackDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverPacksDirectory.FullName, $OSName)
+
+                      Switch ([System.IO.Directory]::Exists($DriverPackDirectory.FullName))
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  $Null = Remove-Item -Path ($DriverPackDirectory.FullName) -Recurse -Force -Confirm:$False
+                              }
+                        }
+
+                      $Null = [System.IO.Directory]::CreateDirectory($DriverPackDirectory.FullName)
+
+                      $OSArchitectureDirectoryList = @($ArchitectureDirectoryList | Where-Object {($_.Parent.Name -ieq $OSName)})
+
+                      For ($OSArchitectureDirectoryListIndex = 0; $OSArchitectureDirectoryListIndex -lt $OSArchitectureDirectoryList.Count; $OSArchitectureDirectoryListIndex++)
+                        {
+                            $OSArchitectureDirectory = $OSArchitectureDirectoryList[$OSArchitectureDirectoryListIndex]
+
+                            #Preserve the full path below the extracted directory (For example, pvpanic\w11\amd64)
+                              [String]$RelativeDirectoryPath = $OSArchitectureDirectory.FullName.Substring($ExtractedDirectory.FullName.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar)
+
+                              $DestinationDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverPackDirectory.FullName, $RelativeDirectoryPath)
+
+                              $Null = [System.IO.Directory]::CreateDirectory($DestinationDirectory.FullName)
+
+                              $Null = Copy-Item -Path "$($OSArchitectureDirectory.FullName)\*" -Destination "$($DestinationDirectory.FullName)\" -Recurse -Force
+                        }
+
+                      Write-Verbose -Message "Staged $($OSArchitectureDirectoryList.Count) driver folder(s) into `"$($DriverPackDirectory.FullName)`"." -Verbose
+                    #endregion
+
+                    #region Create or reuse the DeployR content item for this operating system
+                      [String]$ContentName = "$($ContentNamePrefix) - $($OSName)"
+
+                      $ContentItem = $ExistingContentItemList | Where-Object {($_.Name -ieq $ContentName)} | Select-Object -First 1
+
+                      [Boolean]$ContentItemIsNew = $False
+
+                      Switch ($Null -ine $ContentItem)
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  Write-Verbose -Message "Using the existing DeployR content item. [Name: $($ContentName)]" -Verbose
+                              }
+
+                            Default
+                              {
+                                  Write-Verbose -Message "Attempting to create the DeployR content item. Please Wait... [Name: $($ContentName)]" -Verbose
+
+                                  $NewDeployRContentItemParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                                    $NewDeployRContentItemParameters.Name = $ContentName
+                                    $NewDeployRContentItemParameters.Type = 'Folder'
+                                    $NewDeployRContentItemParameters.Purpose = 'DriverPack'
+                                    $NewDeployRContentItemParameters.Description = "Source: $($ISOPath.Name) [$($OSName)]"
+
+                                  $ContentItem = New-DeployRContentItem @NewDeployRContentItemParameters
+
+                                  [Boolean]$ContentItemIsNew = $True
+                              }
+                        }
+                    #endregion
+
+                    #region Publish the driver pack content as a new content item version (Existing content items only receive a new version when the AddNewVersions parameter is specified)
+                      Switch (($ContentItemIsNew -eq $True) -or ($AddNewVersions.IsPresent -eq $True))
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  Write-Verbose -Message "Attempting to publish the driver pack content as a new content item version. Please Wait... [Name: $($ContentName)]" -Verbose
+
+                                  $NewDeployRContentItemVersionParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                                    $NewDeployRContentItemVersionParameters.ContentItemId = $ContentItem.id
+                                    $NewDeployRContentItemVersionParameters.Description = "Source: $($ISOPath.Name) [$($OSName)]"
+                                    $NewDeployRContentItemVersionParameters.DriverManufacturer = $DriverManufacturer
+                                    $NewDeployRContentItemVersionParameters.DriverModel = $DriverModel
+                                    $NewDeployRContentItemVersionParameters.SourceFolder = $DriverPackDirectory.FullName
+
+                                  $NewContentItemVersion = New-DeployRContentItemVersion @NewDeployRContentItemVersionParameters
+
+                                  $UpdateDeployRContentItemContentParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                                    $UpdateDeployRContentItemContentParameters.ContentId = $ContentItem.id
+                                    $UpdateDeployRContentItemContentParameters.ContentVersion = $NewContentItemVersion.versionNo
+                                    $UpdateDeployRContentItemContentParameters.SourceFolder = $DriverPackDirectory.FullName
+
+                                  $ContentItemVersion = Update-DeployRContentItemContent @UpdateDeployRContentItemContentParameters
+
+                                  Write-Verbose -Message "The driver pack upload completed successfully. [Name: $($ContentName)] [CI ID: $($ContentItemVersion.contentItemId)] [Version: $($ContentItemVersion.versionNo)] [Size: $([System.Math]::Round($ContentItemVersion.contentSize / 1MB, 2)) MB]" -Verbose
+                              }
+
+                            Default
+                              {
+                                  Write-Verbose -Message "The content item already exists and the `"-AddNewVersions`" parameter was not specified. The version publish will be skipped. [Name: $($ContentName)]" -Verbose
+                              }
+                        }
+                    #endregion
+                }
+              Catch
+                {
+                    Write-Warning -Message "The driver pack for operating system `"$($OSName)`" could not be processed. [Error: $($_.Exception.Message)]"
+                }
+              Finally
+                {
+                    $IncludedOSNameListCounter++
+                }
+          }
+
+        $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+          $WriteProgressParameters.Activity = "Processing driver packs"
+          $WriteProgressParameters.Completed = $True
+
+        Write-Progress @WriteProgressParameters
+      #endregion
+  }
+Catch
+  {
+      Switch (([System.Environment]::ExitCode -eq 0))
+        {
+            {($_ -eq $True)}
+              {
+                  [System.Environment]::ExitCode = 1
+              }
         }
-    }
 
-    Write-Host "Building curated x64 driver source at $proxX64DpPath" -ForegroundColor Cyan
-    if (Test-Path -Path $proxX64DpPath) {
-        Remove-Item -Path $proxX64DpPath -Recurse -Force -ErrorAction Stop
-    }
-    New-Item -Path $proxX64DpPath -ItemType Directory -Force | Out-Null
+      Write-Warning -Message "Message: $($_.Exception.Message)"
+      Write-Warning -Message "Script: $([System.IO.Path]::GetFileName($_.InvocationInfo.ScriptName))"
+      Write-Warning -Message "Line Number: $($_.InvocationInfo.ScriptLineNumber)"
+      Write-Warning -Message "Line Position: $($_.InvocationInfo.OffsetInLine)"
+      Write-Warning -Message "Code: $($_.InvocationInfo.Line)"
 
-    $w11Amd64Folders = Get-ChildItem -Path $extractPath -Directory -Recurse | Where-Object {
-        $_.Name -ieq 'amd64' -and (Split-Path -Path $_.Parent.FullName -Leaf) -ieq 'w11'
-    }
-
-    if (-not $w11Amd64Folders) {
-        throw "No w11\\amd64 folders found under $extractPath"
-    }
-
-    foreach ($folder in $w11Amd64Folders) {
-        # Preserve the full path below Extracted (e.g. pvpanic\w11\amd64).
-        $relativeAmd64Path = [System.IO.Path]::GetRelativePath($extractPath, $folder.FullName)
-        $destinationFolder = Join-Path -Path $proxX64DpPath -ChildPath $relativeAmd64Path
-
-        New-Item -Path $destinationFolder -ItemType Directory -Force | Out-Null
-        Copy-Item -Path (Join-Path -Path $folder.FullName -ChildPath '*') -Destination $destinationFolder -Recurse -Force -ErrorAction Stop
-    }
-
-    Write-Host "  Collected $($w11Amd64Folders.Count) w11\\amd64 folder(s) into ProxX64DP." -ForegroundColor DarkGray
-
-    $contentItem = Get-DeployRContentItem | Where-Object { $_.Name -eq $ContentName } | Select-Object -First 1
-    if (-not $contentItem) {
-        Write-Host "Creating DeployR content item: $ContentName" -ForegroundColor Cyan
-        $contentItem = New-DeployRContentItem -Name $ContentName -Type Folder -Purpose DriverPack -Description "Source: $isoFileName"
-    }
-    else {
-        Write-Host "Using existing DeployR content item: $ContentName" -ForegroundColor Yellow
-    }
-
-    # Publish curated x64 driver files as a new content version every run.
-    $newVersion = New-DeployRContentItemVersion -ContentItemId $contentItem.id -Description "Source: $proxX64DpPath" -DriverManufacturer 'Proxmox' -DriverModel 'Virtual Machine' -SourceFolder $proxX64DpPath
-    $ciVersion = Update-DeployRContentItemContent -ContentId $contentItem.id -ContentVersion $newVersion.versionNo -SourceFolder $proxX64DpPath
-
-    Write-Host "Driver Pack upload complete." -ForegroundColor Green
-    Write-Host "  CI ID: $($ciVersion.contentItemId), Version: $($ciVersion.versionNo), Size: $([math]::Round($ciVersion.contentSize / 1MB, 2)) MB" -ForegroundColor DarkGray
-}
-
-if (-not (Test-Path -Path $RootPath -PathType Container)) {
-    Write-Error "Root path does not exist: $RootPath. Update the `$RootPath value near the top of this script to point to an existing folder, then run the script again."
-    exit 1
-}
-
-# Check for Administrator role
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Error "This script must be run as Administrator."
-    exit 1
-}
-function Connect-ToDeployR {
-    try {
-        if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
-            Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility' -ErrorAction Stop
-        }
-        elseif (Get-Module -ListAvailable -Name DeployR.Utility) {
-            Import-Module DeployR.Utility -ErrorAction Stop
-        }
-        else {
-            throw "DeployR.Utility module not found. Please ensure DeployR Client is installed."
-        }
-        
-        Write-Host "Connecting to DeployR..." -ForegroundColor Cyan
-        Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
-        
-        if (Test-Path "HKLM:\software\2Pint Software\DeployR\GeneralSettings") {
-            $DeployRReg = Get-Item -Path "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
-            $ClientPasscode = $DeployRReg.GetValue("ClientPasscode")
-            Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
-        }
-        elseif (Test-Path "D:\DeployRPasscode.txt") {
-            $ClientPasscode = (Get-Content "D:\DeployRPasscode.txt" -Raw)
-            Connect-DeployR -Passcode $ClientPasscode -ErrorAction Stop
-        }
-        else {
-            throw "Cannot find DeployR Client Passcode in registry or D:\DeployRPasscode.txt"
-            Connect-DeployR
-        }
-        
-        Write-Host "Connected to DeployR" -ForegroundColor Green
-        return $true
-    }
-    catch {
-        Write-Error "Failed to connect to DeployR: $_"
-        return $false
-    }
-}
-
-
-#region Execution Area
-# =============================================================================
-# EXECUTION AREA - Download Proxmox VirtIO Driver Pack
-# =============================================================================
-if (Test-Path 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility') {
-    Write-Host "DeployR.Utility module found."
-    Import-Module 'C:\Program Files\2Pint Software\DeployR\Client\PSModules\DeployR.Utility'
-    if (Connect-ToDeployR) {
-        Import-ProxmoxVirtIODriverPack -SourcePath $ProxmoxSourcePath -IsoUrl $ProxmoxIsoUrl -ContentName $ProxmoxContentName
-    }
-    
-} else {
-    Write-Host "DeployR.Utility module not found. Please ensure DeployR Client is installed and update module paths if needed."
-}
-
+      Throw
+  }
+Finally
+  {
+      Write-Verbose -Message "Exiting script with exit code $([System.Environment]::ExitCode)." -Verbose
+  }
