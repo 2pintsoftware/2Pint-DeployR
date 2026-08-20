@@ -12,6 +12,7 @@
     4. Mount the ISO and copy all contents to an Extracted folder (rebuilt on every run).
     5. Detect the operating system folder names from the extracted driver layout (driver\os\architecture) and filter them with the OSInclusionExpression and OSExclusionExpression regular expressions.
     6. For each included operating system, stage the matching driver folders into a per operating system driver pack folder and publish it into its own DeployR content item. Newly created content items always receive their initial version, while existing content items only receive a new version when the AddNewVersions parameter is specified.
+    7. Apply the tag list to each content item and all of its versions: Drivers, VirtIO, the driver manufacturer, the driver model, the operating system folder name, and the included architecture folder name(s).
 
     Local content layout created/used (relative to the source root):
         Proxmox\<AnyName>.iso
@@ -23,6 +24,7 @@
         Type: Folder
         Purpose: DriverPack
         Version behavior: newly created content items receive their initial version automatically, and existing content items only receive a new version when the AddNewVersions parameter is specified.
+        Tags: Drivers, VirtIO, <DriverManufacturer>, <DriverModel>, <OSName>, and the included architecture folder name(s) (for example amd64) are applied to the content item and all of its versions.
 
     .PARAMETER RootDirectory
     The existing local source root directory. The "Proxmox" source folder structure is created beneath this directory.
@@ -417,6 +419,7 @@ Try
                     $ProgressPercentage = [System.Math]::Round((($IncludedOSNameListCounter / $IncludedOSNameList.Count) * 100), 2)
 
                     $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                      $WriteProgressParameters.Id = 1
                       $WriteProgressParameters.Activity = "Processing driver pack $($IncludedOSNameListCounter) of $($IncludedOSNameList.Count). Please Wait... [Operating System: $($OSName)]"
                       $WriteProgressParameters.Status = "Progress Percentage: $($ProgressPercentage)%"
                       $WriteProgressParameters.PercentComplete = $ProgressPercentage
@@ -448,12 +451,32 @@ Try
                             #Preserve the full path below the extracted directory (For example, pvpanic\w11\amd64)
                               [String]$RelativeDirectoryPath = $OSArchitectureDirectory.FullName.Substring($ExtractedDirectory.FullName.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar)
 
+                              $StagingProgressPercentage = [System.Math]::Round(((($OSArchitectureDirectoryListIndex + 1) / $OSArchitectureDirectoryList.Count) * 100), 2)
+
+                              $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                                $WriteProgressParameters.Id = 2
+                                $WriteProgressParameters.ParentId = 1
+                                $WriteProgressParameters.Activity = "Staging driver folder $($OSArchitectureDirectoryListIndex + 1) of $($OSArchitectureDirectoryList.Count). Please Wait... [Operating System: $($OSName)]"
+                                $WriteProgressParameters.Status = "Progress Percentage: $($StagingProgressPercentage)%"
+                                $WriteProgressParameters.PercentComplete = $StagingProgressPercentage
+                                $WriteProgressParameters.CurrentOperation = $RelativeDirectoryPath
+
+                              Write-Progress @WriteProgressParameters
+
                               $DestinationDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverPackDirectory.FullName, $RelativeDirectoryPath)
 
                               $Null = [System.IO.Directory]::CreateDirectory($DestinationDirectory.FullName)
 
                               $Null = Copy-Item -Path "$($OSArchitectureDirectory.FullName)\*" -Destination "$($DestinationDirectory.FullName)\" -Recurse -Force
                         }
+
+                      $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+                        $WriteProgressParameters.Id = 2
+                        $WriteProgressParameters.ParentId = 1
+                        $WriteProgressParameters.Activity = "Staging driver folders"
+                        $WriteProgressParameters.Completed = $True
+
+                      Write-Progress @WriteProgressParameters
 
                       Write-Verbose -Message "Staged $($OSArchitectureDirectoryList.Count) driver folder(s) into `"$($DriverPackDirectory.FullName)`"." -Verbose
                     #endregion
@@ -521,6 +544,149 @@ Try
                               }
                         }
                     #endregion
+
+                    #region Apply the tag list to the content item and all of its versions
+                      $ContentItemTagList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+                        $ContentItemTagList.Add('Drivers')
+                        $ContentItemTagList.Add('VirtIO')
+                        $ContentItemTagList.Add($DriverManufacturer)
+                        $ContentItemTagList.Add($DriverModel)
+                        $ContentItemTagList.Add($OSName)
+
+                      $OSArchitectureNameList = $OSArchitectureDirectoryList | ForEach-Object {$_.Name} | Sort-Object -Unique
+
+                      ForEach ($OSArchitectureName In $OSArchitectureNameList)
+                        {
+                            $ContentItemTagList.Add($OSArchitectureName)
+                        }
+
+                      Write-Verbose -Message "Attempting to apply $($ContentItemTagList.Count) tag(s) to the content item and all of its versions. Please Wait... [Name: $($ContentName)] [Tags: $($ContentItemTagList -Join ', ')]" -Verbose
+
+                      $ContentItemMetadata = Get-DeployRMetaData -Type ContentItem | Where-Object {($_.id -eq $ContentItem.id)} | Select-Object -First 1
+
+                      Switch ($Null -ine $ContentItemMetadata)
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  #region Apply the missing tags to the content item
+                                    $MissingContentItemTagList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+
+                                    ForEach ($ContentItemTag In $ContentItemTagList)
+                                      {
+                                          Switch ($ContentItemMetadata.tags -icontains $ContentItemTag)
+                                            {
+                                                {($_ -eq $False)}
+                                                  {
+                                                      $MissingContentItemTagList.Add($ContentItemTag)
+                                                  }
+                                            }
+                                      }
+
+                                    Switch ($MissingContentItemTagList.Count -gt 0)
+                                      {
+                                          {($_ -eq $True)}
+                                            {
+                                                $UpdatedContentItemTagList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+
+                                                ForEach ($ExistingContentItemTag In $ContentItemMetadata.tags)
+                                                  {
+                                                      Switch ([String]::IsNullOrEmpty($ExistingContentItemTag))
+                                                        {
+                                                            {($_ -eq $False)}
+                                                              {
+                                                                  $UpdatedContentItemTagList.Add($ExistingContentItemTag)
+                                                              }
+                                                        }
+                                                  }
+
+                                                $UpdatedContentItemTagList.AddRange($MissingContentItemTagList)
+
+                                                $ContentItemMetadata.tags = $UpdatedContentItemTagList.ToArray()
+
+                                                $Null = Set-DeployRMetadata -Type ContentItem -Object $ContentItemMetadata
+
+                                                Write-Verbose -Message "Added $($MissingContentItemTagList.Count) tag(s) to the content item. [Name: $($ContentName)] [Added Tags: $($MissingContentItemTagList -Join ', ')]" -Verbose
+                                            }
+
+                                          Default
+                                            {
+                                                Write-Verbose -Message "All tags already exist on the content item. [Name: $($ContentName)]" -Verbose
+                                            }
+                                      }
+                                  #endregion
+
+                                  #region Apply the missing tags to each content item version
+                                    $ContentItemVersionList = New-Object -TypeName 'System.Collections.Generic.List[PSObject]'
+
+                                    ForEach ($ContentItemVersion In $ContentItemMetadata.versions)
+                                      {
+                                          Switch ($Null -ine $ContentItemVersion)
+                                            {
+                                                {($_ -eq $True)}
+                                                  {
+                                                      $ContentItemVersionList.Add($ContentItemVersion)
+                                                  }
+                                            }
+                                      }
+
+                                    For ($ContentItemVersionListIndex = 0; $ContentItemVersionListIndex -lt $ContentItemVersionList.Count; $ContentItemVersionListIndex++)
+                                      {
+                                          $ContentItemVersionMetadata = $ContentItemVersionList[$ContentItemVersionListIndex]
+
+                                          $MissingContentItemVersionTagList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+
+                                          ForEach ($ContentItemTag In $ContentItemTagList)
+                                            {
+                                                Switch ($ContentItemVersionMetadata.tags -icontains $ContentItemTag)
+                                                  {
+                                                      {($_ -eq $False)}
+                                                        {
+                                                            $MissingContentItemVersionTagList.Add($ContentItemTag)
+                                                        }
+                                                  }
+                                            }
+
+                                          Switch ($MissingContentItemVersionTagList.Count -gt 0)
+                                            {
+                                                {($_ -eq $True)}
+                                                  {
+                                                      $UpdatedContentItemVersionTagList = New-Object -TypeName 'System.Collections.Generic.List[System.String]'
+
+                                                      ForEach ($ExistingContentItemVersionTag In $ContentItemVersionMetadata.tags)
+                                                        {
+                                                            Switch ([String]::IsNullOrEmpty($ExistingContentItemVersionTag))
+                                                              {
+                                                                  {($_ -eq $False)}
+                                                                    {
+                                                                        $UpdatedContentItemVersionTagList.Add($ExistingContentItemVersionTag)
+                                                                    }
+                                                              }
+                                                        }
+
+                                                      $UpdatedContentItemVersionTagList.AddRange($MissingContentItemVersionTagList)
+
+                                                      $ContentItemVersionMetadata.tags = $UpdatedContentItemVersionTagList.ToArray()
+
+                                                      $Null = Set-DeployRMetadata -Type ContentItemVersion -Object $ContentItemVersionMetadata
+
+                                                      Write-Verbose -Message "Added $($MissingContentItemVersionTagList.Count) tag(s) to content item version $($ContentItemVersionMetadata.versionNo). [Name: $($ContentName)] [Added Tags: $($MissingContentItemVersionTagList -Join ', ')]" -Verbose
+                                                  }
+
+                                                Default
+                                                  {
+                                                      Write-Verbose -Message "All tags already exist on content item version $($ContentItemVersionMetadata.versionNo). [Name: $($ContentName)]" -Verbose
+                                                  }
+                                            }
+                                      }
+                                  #endregion
+                              }
+
+                            Default
+                              {
+                                  Write-Warning -Message "The content item metadata could not be retrieved for tagging. [Name: $($ContentName)]"
+                              }
+                        }
+                    #endregion
                 }
               Catch
                 {
@@ -533,6 +699,7 @@ Try
           }
 
         $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
+          $WriteProgressParameters.Id = 1
           $WriteProgressParameters.Activity = "Processing driver packs"
           $WriteProgressParameters.Completed = $True
 
