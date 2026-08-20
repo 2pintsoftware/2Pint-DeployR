@@ -50,9 +50,9 @@ Change Log
 - 2026.07.28 - Added Check for Latest versions of DeployR & StifleR installed based on releases.2pintsoftware.com
 - 2026.07.29 - Updated to support iPXE 4.0 Apps (new names & registry locations)
 - 2026.07.29 - Updated the check for Infra Services API to provide better feedback if auth is the issue.
+- 2026.08.20 - Added notes about the dashboard not needing IIS, but instead using port 9000
 
-To DO
-- Add if Statements for SQL Permissions checks and remediation, first check connection string to get instance name
+
 #>
 
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
@@ -1712,8 +1712,17 @@ if ($Installed_2Pint_Software_StifleR_Server){
         Write-Host "✓ StifleRDashboard Web Virtual Directory exists in Default Web Site." -ForegroundColor Green
         Write-Host "  Physical Path: $($vdir.PhysicalPath)" -ForegroundColor DarkGray
     } else {
-        Write-Host "✗ StifleRDashboard Web Virtual Directory is NOT present in Default Web Site." -ForegroundColor Red
-        Write-Host "Remediation: Run the following command:" -ForegroundColor Yellow
+        Write-Host "✗ StifleRDashboard Web Virtual Directory is NOT present in Default Web Site." -ForegroundColor Yellow
+        Write-Host " This is not required with StifleR 3+ any longer, so it's possible this is not an issue." -ForegroundColor DarkGray
+        $FQDN = Get-FQDNFromDashboardConfig
+        if ($FQDN) {
+            Write-Host " The option to use https://$($FQDN):9000/dashboard is now available." -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host " The option to use https://FQDN:9000/dashboard is now available." -ForegroundColor DarkGray
+        }
+
+        Write-Host "If remediation is desired (OPTIONAL) to use IIS to host the dashboard: Run the following command:" -ForegroundColor Yellow
         Write-Host "New-WebVirtualDirectory -Site 'Default Web Site' -Name 'StifleRDashboard' -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'" -ForegroundColor DarkGray
         $IISVirtualDirMissing = $true
     }
