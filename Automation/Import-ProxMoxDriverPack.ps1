@@ -8,33 +8,34 @@
     Workflow:
     1. Validate administrative rights and determine the local source root (dynamically selected when not supplied: the largest fixed and ready drive with a drive letter, using "2Pint\DeployR\Source" beneath its root), creating it when it does not exist.
     2. Import the local DeployR.Utility module and connect to DeployR using the client passcode (registry first, passcode file second).
-    3. Locate the latest ISO within the Proxmox source folder regardless of its file name, or download the ISO when none exists.
+    3. Locate the latest ISO within the ISO folder regardless of its file name, or download the ISO when none exists.
     4. Mount the ISO and copy all contents to an Extracted folder (rebuilt on every run).
     5. Detect the operating system folder names from the extracted driver layout (driver\os\architecture) and filter them with the OSInclusionExpression and OSExclusionExpression regular expressions.
     6. For each included operating system, stage the matching driver folders into a per operating system driver pack folder and publish it into its own DeployR content item. Newly created content items always receive their initial version, while existing content items only receive a new version when the AddNewVersions parameter is specified.
-    7. Apply the tag list to each content item and all of its versions: Drivers, VirtIO, the driver manufacturer, the driver model, the operating system folder name, and the included architecture folder name(s).
+    7. Apply the tag list to each content item and all of its versions: Drivers, VirtIO, the driver manufacturer, the driver model, the operating system folder name, the operating system display name, and the included architecture folder name(s).
 
     Local content layout created/used (relative to the source root):
-        Proxmox\<AnyName>.iso
-        Proxmox\Extracted\*
-        Proxmox\DriverPacks\<OSName>\*
+        Proxmox\VirtIO\ISO\<AnyName>.iso
+        Proxmox\VirtIO\Extracted\*
+        Proxmox\VirtIO\DriverPacks\<OSName>\*
 
     DeployR content items used (one per included operating system):
-        Name: <ContentNamePrefix> - <OSName> (for example "Driver Pack - Proxmox - VirtIO - w11")
+        Name: <ContentNamePrefix> - <OSDisplayName> (for example "Driver Pack - Proxmox - VirtIO - Windows 11" or "Driver Pack - Proxmox - VirtIO - Windows Server 2022")
+        Naming: the operating system folder names are mapped to friendly display names through a mapping table, and unmapped folder names fall through to the folder name as-is.
         Type: Folder
         Purpose: DriverPack
         Version behavior: newly created content items receive their initial version automatically, and existing content items only receive a new version when the AddNewVersions parameter is specified.
-        Tags: Drivers, VirtIO, <DriverManufacturer>, <DriverModel>, <OSName>, and the included architecture folder name(s) (for example amd64) are applied to the content item and all of its versions.
+        Tags: Drivers, VirtIO, <DriverManufacturer>, <DriverModel>, <OSName>, <OSDisplayName>, and the included architecture folder name(s) (for example amd64) are applied to the content item and all of its versions.
 
     .PARAMETER RootDirectory
     The local source root directory. The "Proxmox" source folder structure is created beneath this directory.
     Empty by default and dynamically determined: the largest fixed and ready drive with a drive letter is selected, and "2Pint\DeployR\Source" beneath its root is used. The directory is created when it does not exist.
 
     .PARAMETER DownloadURL
-    The URL where the VirtIO driver ISO is located. The download only occurs when no ISO already exists within the Proxmox source folder (any ISO file name is accepted and the latest one is used).
+    The URL where the VirtIO driver ISO is located. The download only occurs when no ISO already exists within the ISO folder (any ISO file name is accepted and the latest one is used).
 
     .PARAMETER OSInclusionExpression
-    A regular expression that determines which detected operating system folder names are included. The default expression includes every detected operating system.
+    A regular expression that determines which detected operating system folder names are included. The default expression includes Windows 10, Windows 11, and Windows Server 2016 through Windows Server 2025 (w10, w11, 2k16, 2k19, 2k22, 2k25). Every other detected operating system is skipped by default without requiring an exclusion.
 
     .PARAMETER OSExclusionExpression
     A regular expression that determines which detected operating system folder names are excluded. The default expression excludes nothing.
@@ -43,7 +44,7 @@
     A regular expression that determines which processor architecture folder names are included within each driver pack.
 
     .PARAMETER ContentNamePrefix
-    The DeployR content item name prefix. The detected operating system folder name is appended to form the full content item name.
+    The DeployR content item name prefix. The operating system display name is appended to form the full content item name (for example "Driver Pack - Proxmox - VirtIO - Windows Server 2022").
 
     .PARAMETER DriverManufacturer
     The driver manufacturer (make) recorded on each published content item version.
@@ -64,7 +65,7 @@
     pwsh.exe -ExecutionPolicy Bypass -NoProfile -NoLogo -File ".\Import-ProxMoxDriverPack.ps1" -OSInclusionExpression '.*(w11|2k25).*' -OSExclusionExpression '.*(w7|xp).*' -AddNewVersions
 
     .EXAMPLE
-    .\Import-ProxMoxDriverPack.ps1 -RootDirectory 'D:\SourceRepo\DriverPacks\X64\WinPE' -ContentNamePrefix 'Driver Pack - Proxmox - VirtIO'
+    .\Import-ProxMoxDriverPack.ps1 -RootDirectory 'D:\2Pint\DeployR\Source' -ContentNamePrefix 'Driver Pack - Proxmox - VirtIO'
 
     .NOTES
     The operating system folder names within the VirtIO ISO follow the vendor naming convention, such as w10, w11, 2k16, 2k19, 2k22, and 2k25.
@@ -91,7 +92,7 @@
         [Parameter(Mandatory=$False)]
         [ValidateNotNullOrEmpty()]
         [Alias('OSIE')]
-        [Regex]$OSInclusionExpression = '.*(win11|).*',
+        [Regex]$OSInclusionExpression = '.*(w10|w11|2k16|2k19|2k22|2k25).*',
 
         [Parameter(Mandatory=$False)]
         [ValidateNotNullOrEmpty()]
@@ -188,15 +189,16 @@ Try
                   }
             }
 
-        $DriverSourceDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($RootDirectory.FullName, 'Proxmox')
+        $DriverSourceDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($RootDirectory.FullName, 'Proxmox', 'VirtIO')
+        $ISODirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'ISO')
         $ExtractedDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'Extracted')
         $DriverPacksDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'DriverPacks')
 
-        Switch ([System.IO.Directory]::Exists($DriverSourceDirectory.FullName))
+        Switch ([System.IO.Directory]::Exists($ISODirectory.FullName))
           {
               {($_ -eq $False)}
                 {
-                    $Null = [System.IO.Directory]::CreateDirectory($DriverSourceDirectory.FullName)
+                    $Null = [System.IO.Directory]::CreateDirectory($ISODirectory.FullName)
                 }
           }
       #endregion
@@ -243,8 +245,6 @@ Try
       #endregion
 
       #region Connect to DeployR using the client passcode (Registry first, passcode file second)
-        [System.IO.FileInfo]$DeployRSettingsRegistryPath = "$($Env:SystemDrive)"
-
         $DeployRGeneralSettingsPath = 'HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings'
 
         #Determine the passcode file path dynamically when one was not explicitly supplied (The root of the drive containing the source root directory)
@@ -306,8 +306,8 @@ Try
         Write-Verbose -Message "Successfully connected to DeployR." -Verbose
       #endregion
 
-      #region Stage the ISO (Any existing ISO within the source folder is used as-is regardless of its file name, otherwise the ISO is downloaded)
-        $ExistingISOList = Get-ChildItem -Path ($DriverSourceDirectory.FullName) -Filter '*.iso' -Force -ErrorAction SilentlyContinue | Where-Object {($_ -is [System.IO.FileInfo])}
+      #region Stage the ISO (Any existing ISO within the ISO folder is used as-is regardless of its file name, otherwise the ISO is downloaded)
+        $ExistingISOList = Get-ChildItem -Path ($ISODirectory.FullName) -Filter '*.iso' -Force -ErrorAction SilentlyContinue | Where-Object {($_ -is [System.IO.FileInfo])}
 
         $ExistingISOListCount = ($ExistingISOList | Measure-Object).Count
 
@@ -317,12 +317,12 @@ Try
                 {
                     $ISOPath = $ExistingISOList | Sort-Object -Property @('LastWriteTime') -Descending | Select-Object -First 1
 
-                    Write-Verbose -Message "Found $($ExistingISOListCount) existing ISO image(s) within `"$($DriverSourceDirectory.FullName)`". The download will be skipped. [Latest Existing ISO Image: $($ISOPath.FullName)]" -Verbose
+                    Write-Verbose -Message "Found $($ExistingISOListCount) existing ISO image(s) within `"$($ISODirectory.FullName)`". The download will be skipped. [Latest Existing ISO Image: $($ISOPath.FullName)]" -Verbose
                 }
 
               Default
                 {
-                    $ISOPath = [System.IO.FileInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, [System.IO.Path]::GetFileName($DownloadURL.OriginalString))
+                    $ISOPath = [System.IO.FileInfo][System.IO.Path]::Combine($ISODirectory.FullName, [System.IO.Path]::GetFileName($DownloadURL.OriginalString))
 
                     Write-Verbose -Message "Attempting to download `"$($DownloadURL.OriginalString)`" to `"$($ISOPath.FullName)`". Please Wait..." -Verbose
 
@@ -430,6 +430,25 @@ Try
           }
       #endregion
 
+      #region Define the operating system display name mapping table (Unmapped folder names fall through to the folder name as-is)
+        $OSDisplayNameTable = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary' -ArgumentList ([System.StringComparer]::OrdinalIgnoreCase)
+          $OSDisplayNameTable.'xp' = 'Windows XP'
+          $OSDisplayNameTable.'w7' = 'Windows 7'
+          $OSDisplayNameTable.'w8' = 'Windows 8'
+          $OSDisplayNameTable.'w8.1' = 'Windows 8.1'
+          $OSDisplayNameTable.'w10' = 'Windows 10'
+          $OSDisplayNameTable.'w11' = 'Windows 11'
+          $OSDisplayNameTable.'2k3' = 'Windows Server 2003'
+          $OSDisplayNameTable.'2k8' = 'Windows Server 2008'
+          $OSDisplayNameTable.'2k8R2' = 'Windows Server 2008 R2'
+          $OSDisplayNameTable.'2k12' = 'Windows Server 2012'
+          $OSDisplayNameTable.'2k12R2' = 'Windows Server 2012 R2'
+          $OSDisplayNameTable.'2k16' = 'Windows Server 2016'
+          $OSDisplayNameTable.'2k19' = 'Windows Server 2019'
+          $OSDisplayNameTable.'2k22' = 'Windows Server 2022'
+          $OSDisplayNameTable.'2k25' = 'Windows Server 2025'
+      #endregion
+
       #region Retrieve the existing DeployR content item list one time before processing
         $ExistingContentItemList = Get-DeployRContentItem
       #endregion
@@ -443,6 +462,20 @@ Try
                 {
                     $OSName = $IncludedOSNameList[$IncludedOSNameListIndex]
 
+                    #Determine the operating system display name (Unmapped folder names fall through to the folder name as-is)
+                      Switch ($OSDisplayNameTable.Contains($OSName))
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  [String]$OSDisplayName = $OSDisplayNameTable[$OSName]
+                              }
+
+                            Default
+                              {
+                                  [String]$OSDisplayName = $OSName
+                              }
+                        }
+
                     $ProgressPercentage = [System.Math]::Round((($IncludedOSNameListCounter / $IncludedOSNameList.Count) * 100), 2)
 
                     $WriteProgressParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
@@ -454,7 +487,7 @@ Try
 
                     Write-Progress @WriteProgressParameters
 
-                    Write-Verbose -Message "Attempting to process driver pack $($IncludedOSNameListCounter) of $($IncludedOSNameList.Count). Please Wait... [Operating System: $($OSName)]" -Verbose
+                    Write-Verbose -Message "Attempting to process driver pack $($IncludedOSNameListCounter) of $($IncludedOSNameList.Count). Please Wait... [Operating System: $($OSDisplayName) ($($OSName))]" -Verbose
 
                     #region Stage the matching driver folders into the per operating system driver pack folder
                       $DriverPackDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverPacksDirectory.FullName, $OSName)
@@ -509,7 +542,7 @@ Try
                     #endregion
 
                     #region Create or reuse the DeployR content item for this operating system
-                      [String]$ContentName = "$($ContentNamePrefix) - $($OSName)"
+                      [String]$ContentName = "$($ContentNamePrefix) - $($OSDisplayName)"
 
                       $ContentItem = $ExistingContentItemList | Where-Object {($_.Name -ieq $ContentName)} | Select-Object -First 1
 
@@ -530,7 +563,7 @@ Try
                                     $NewDeployRContentItemParameters.Name = $ContentName
                                     $NewDeployRContentItemParameters.Type = 'Folder'
                                     $NewDeployRContentItemParameters.Purpose = 'DriverPack'
-                                    $NewDeployRContentItemParameters.Description = "Source: $($ISOPath.Name) [$($OSName)]"
+                                    $NewDeployRContentItemParameters.Description = "Source: $($ISOPath.Name) [$($OSDisplayName)]"
 
                                   $ContentItem = New-DeployRContentItem @NewDeployRContentItemParameters
 
@@ -548,7 +581,7 @@ Try
 
                                   $NewDeployRContentItemVersionParameters = New-Object -TypeName 'System.Collections.Specialized.OrderedDictionary'
                                     $NewDeployRContentItemVersionParameters.ContentItemId = $ContentItem.id
-                                    $NewDeployRContentItemVersionParameters.Description = "Source: $($ISOPath.Name) [$($OSName)]"
+                                    $NewDeployRContentItemVersionParameters.Description = "Source: $($ISOPath.Name) [$($OSDisplayName)]"
                                     $NewDeployRContentItemVersionParameters.DriverManufacturer = $DriverManufacturer
                                     $NewDeployRContentItemVersionParameters.DriverModel = $DriverModel
                                     $NewDeployRContentItemVersionParameters.SourceFolder = $DriverPackDirectory.FullName
@@ -579,6 +612,14 @@ Try
                         $ContentItemTagList.Add($DriverManufacturer)
                         $ContentItemTagList.Add($DriverModel)
                         $ContentItemTagList.Add($OSName)
+
+                      Switch ($OSDisplayName -ine $OSName)
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  $ContentItemTagList.Add($OSDisplayName)
+                              }
+                        }
 
                       $OSArchitectureNameList = $OSArchitectureDirectoryList | ForEach-Object {$_.Name} | Sort-Object -Unique
 
@@ -645,13 +686,13 @@ Try
                                   #region Apply the missing tags to each content item version
                                     $ContentItemVersionList = New-Object -TypeName 'System.Collections.Generic.List[PSObject]'
 
-                                    ForEach ($ContentItemVersion In $ContentItemMetadata.versions)
+                                    ForEach ($ContentItemVersionEntry In $ContentItemMetadata.versions)
                                       {
-                                          Switch ($Null -ine $ContentItemVersion)
+                                          Switch ($Null -ine $ContentItemVersionEntry)
                                             {
                                                 {($_ -eq $True)}
                                                   {
-                                                      $ContentItemVersionList.Add($ContentItemVersion)
+                                                      $ContentItemVersionList.Add($ContentItemVersionEntry)
                                                   }
                                             }
                                       }
