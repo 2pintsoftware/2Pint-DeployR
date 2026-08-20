@@ -6,7 +6,7 @@
     This script does not install or apply drivers to the currently running operating system. It only stages driver source files and uploads them into DeployR content items.
 
     Workflow:
-    1. Validate administrative rights and the local source root.
+    1. Validate administrative rights and determine the local source root (dynamically selected when not supplied: the largest fixed and ready drive with a drive letter, using "2Pint\DeployR\Source" beneath its root), creating it when it does not exist.
     2. Import the local DeployR.Utility module and connect to DeployR using the client passcode (registry first, passcode file second).
     3. Locate the latest ISO within the Proxmox source folder regardless of its file name, or download the ISO when none exists.
     4. Mount the ISO and copy all contents to an Extracted folder (rebuilt on every run).
@@ -27,7 +27,8 @@
         Tags: Drivers, VirtIO, <DriverManufacturer>, <DriverModel>, <OSName>, and the included architecture folder name(s) (for example amd64) are applied to the content item and all of its versions.
 
     .PARAMETER RootDirectory
-    The existing local source root directory. The "Proxmox" source folder structure is created beneath this directory.
+    The local source root directory. The "Proxmox" source folder structure is created beneath this directory.
+    Empty by default and dynamically determined: the largest fixed and ready drive with a drive letter is selected, and "2Pint\DeployR\Source" beneath its root is used. The directory is created when it does not exist.
 
     .PARAMETER DownloadURL
     The URL where the VirtIO driver ISO is located. The download only occurs when no ISO already exists within the Proxmox source folder (any ISO file name is accepted and the latest one is used).
@@ -80,7 +81,7 @@
         [Parameter(Mandatory=$False)]
         [ValidateNotNullOrEmpty()]
         [Alias('Root', 'RD')]
-        [System.IO.DirectoryInfo]$RootDirectory = 'D:\SourceRepo\DriverPacks\X64\WinPE',
+        [System.IO.DirectoryInfo]$RootDirectory,
 
         [Parameter(Mandatory=$False)]
         [ValidateNotNullOrEmpty()]
@@ -152,14 +153,40 @@ Try
           }
       #endregion
 
-      #region Validate the source root and define the directory structure
-        Switch ([System.IO.Directory]::Exists($RootDirectory.FullName))
-          {
-              {($_ -eq $False)}
-                {
-                    Throw "The root directory `"$($RootDirectory.FullName)`" does not exist. Update the RootDirectory parameter to point to an existing folder and run the script again."
-                }
-          }
+      #region Determine, validate, and create the source root and define the directory structure
+        #Determine the source root dynamically when one was not explicitly supplied (The largest fixed and ready drive with a drive letter)
+          Switch ($PSBoundParameters.ContainsKey('RootDirectory'))
+            {
+                {($_ -eq $False)}
+                  {
+                      $FixedDriveList = [System.IO.DriveInfo]::GetDrives() | Where-Object {($_.DriveType -ieq 'Fixed') -and ($_.IsReady -eq $True) -and ([String]::IsNullOrEmpty($_.Name) -eq $False) -and ([String]::IsNullOrWhiteSpace($_.Name) -eq $False)}
+
+                      $LargestFixedDrive = $FixedDriveList | Sort-Object -Property @('TotalSize') -Descending | Select-Object -First 1
+
+                      Switch ($Null -ieq $LargestFixedDrive)
+                        {
+                            {($_ -eq $True)}
+                              {
+                                  Throw "Unable to locate a fixed and ready drive with a drive letter for the dynamically determined source root."
+                              }
+                        }
+
+                      $RootDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($LargestFixedDrive.RootDirectory.FullName, '2Pint', 'DeployR', 'Source')
+
+                      Write-Verbose -Message "The source root was dynamically determined. [Drive: $($LargestFixedDrive.Name)] [Total Size: $([System.Math]::Round($LargestFixedDrive.TotalSize / 1GB, 2)) GB] [Path: $($RootDirectory.FullName)]" -Verbose
+                  }
+            }
+
+        #Create the source root when it does not exist
+          Switch ([System.IO.Directory]::Exists($RootDirectory.FullName))
+            {
+                {($_ -eq $False)}
+                  {
+                      Write-Verbose -Message "Attempting to create the source root directory. Please Wait... [Path: $($RootDirectory.FullName)]" -Verbose
+
+                      $Null = [System.IO.Directory]::CreateDirectory($RootDirectory.FullName)
+                  }
+            }
 
         $DriverSourceDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($RootDirectory.FullName, 'Proxmox')
         $ExtractedDirectory = [System.IO.DirectoryInfo][System.IO.Path]::Combine($DriverSourceDirectory.FullName, 'Extracted')
