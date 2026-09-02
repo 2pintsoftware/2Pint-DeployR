@@ -76,6 +76,10 @@ This prompt will auto-continue in 30 seconds.
 	$continueButton.Size = New-Object System.Drawing.Size(190, 34)
 	$continueButton.Location = New-Object System.Drawing.Point(160, 166)
 	$continueButton.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+	$continueButton.Add_Click({
+		$form.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+		$form.Close()
+	})
 	$form.Controls.Add($continueButton)
 
 	$failButton = New-Object System.Windows.Forms.Button
@@ -83,32 +87,43 @@ This prompt will auto-continue in 30 seconds.
 	$failButton.Size = New-Object System.Drawing.Size(160, 34)
 	$failButton.Location = New-Object System.Drawing.Point(364, 166)
 	$failButton.DialogResult = [System.Windows.Forms.DialogResult]::No
+	$failButton.Add_Click({
+		$form.DialogResult = [System.Windows.Forms.DialogResult]::No
+		$form.Close()
+	})
 	$form.Controls.Add($failButton)
 
 	$form.AcceptButton = $continueButton
 	$form.CancelButton = $failButton
 
-	$secondsRemaining = 30
+	$timeoutSeconds = 30
 	$defaultContinueText = 'Continue Task Sequence'
-	$continueButton.Text = "$defaultContinueText ($secondsRemaining)"
+	$continueButton.Text = "$defaultContinueText ($timeoutSeconds)"
 
-	$timer = New-Object System.Windows.Forms.Timer
-	$timer.Interval = 1000
-	$timer.Add_Tick({
-		$secondsRemaining--
-		if ($secondsRemaining -le 0) {
-			$timer.Stop()
+	$form.Show()
+	$form.Activate()
+
+	$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+	while (-not $form.IsDisposed -and $form.Visible) {
+		$remainingSeconds = [int][Math]::Ceiling($timeoutSeconds - $stopwatch.Elapsed.TotalSeconds)
+		if ($remainingSeconds -lt 0) { $remainingSeconds = 0 }
+		$continueButton.Text = "$defaultContinueText ($remainingSeconds)"
+
+		if ($stopwatch.Elapsed.TotalSeconds -ge $timeoutSeconds) {
 			$form.DialogResult = [System.Windows.Forms.DialogResult]::Yes
 			$form.Close()
-			return
+			break
 		}
-		$continueButton.Text = "$defaultContinueText ($secondsRemaining)"
-	})
 
-	$form.Add_Shown({ $timer.Start() })
-	$form.Add_FormClosed({ $timer.Stop(); $timer.Dispose() })
+		[System.Windows.Forms.Application]::DoEvents()
+		[System.Threading.Thread]::Sleep(200)
+	}
 
-	return $form.ShowDialog()
+	$stopwatch.Stop()
+	$result = $form.DialogResult
+	$form.Dispose()
+
+	return $result
 }
 
 $clientVersion = Get-DeployRTSVariable -Name 'DEPLOYRCLIENTVERSION'
