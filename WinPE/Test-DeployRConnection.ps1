@@ -35,7 +35,7 @@ if (-not (Test-Path -Path $LogFolder)){
     $LogFolder = $env:TEMP
 }
 
-Start-Transcript -Path (Join-Path $LogFolder "TestDeployRConnect.txt") -Force | Out-Null
+Start-Transcript -Path (Join-Path $LogFolder "TestDeployRConnect.log") -Force | Out-Null
 
 function Get-NetworkInfo {
 
