@@ -23,7 +23,7 @@ if (Get-PSProvider TSENV -ErrorAction SilentlyContinue){
     $DeployRServer = ([System.Uri]$TSENV:DEPLOYRHOST).Host
 }
 else {
-    $DeployRServer = "deployr.2p.garytown.com"
+    $DeployRServer = "deployr.2pintdemo.net"
 }
 
 
