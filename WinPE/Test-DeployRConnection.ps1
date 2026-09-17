@@ -8,7 +8,7 @@
     . "$PSScriptRoot\Test-DeployRConnection.ps1"
 
 .NOTES
-    Author: Mike Terrill/2Pint Software
+    Author: Mike Terrill/Gary Blok/2Pint Software
     Date: September 17, 2026
     Version: 26.09.17
         
