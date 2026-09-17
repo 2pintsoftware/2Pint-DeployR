@@ -1,18 +1,7 @@
-<#
-.SYNOPSIS
-Looks up an AD computer object and returns DeployR task sequence variables.
-
-.DESCRIPTION
-This server-side script accepts a computer name, queries Active Directory,
-and returns name/value objects that DeployR can inject as task sequence variables.
-
-.NOTES
-Date Created: 2026-06-12
-Created By: Gary Blok
-#>
-
 param(
     [string]$ComputerName,
+
+    [string]$OU,
 
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$ExtraArgs
@@ -20,7 +9,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Helper to return DeployR-compatible task sequence variable objects.
 function New-DeployRVariable {
     param(
         [Parameter(Mandatory = $true)]
@@ -35,7 +23,6 @@ function New-DeployRVariable {
     }
 }
 
-# Parse extra task sequence arguments into a key/value hashtable.
 function ConvertTo-ExtraParams {
     param(
         [string[]]$Arguments
@@ -146,7 +133,6 @@ if ($shortName -like '*.*') {
 }
 
 try {
-    # Resolve LDAP search base with fallback for local-account contexts.
     $resolvedDomainFqdn = ''
     $defaultNamingContext = ''
 
@@ -176,11 +162,18 @@ try {
         throw 'Unable to resolve AD default naming context. If running under a local account, pass ADDomainFqdn as an extra parameter.'
     }
 
-    $searchBase = if ([string]::IsNullOrWhiteSpace($resolvedDomainFqdn)) {
-        "LDAP://$defaultNamingContext"
+    $searchBaseDn = if ([string]::IsNullOrWhiteSpace($OU)) {
+        $defaultNamingContext
     }
     else {
-        "LDAP://$resolvedDomainFqdn/$defaultNamingContext"
+        $OU.Trim()
+    }
+
+    $searchBase = if ([string]::IsNullOrWhiteSpace($resolvedDomainFqdn)) {
+        "LDAP://$searchBaseDn"
+    }
+    else {
+        "LDAP://$resolvedDomainFqdn/$searchBaseDn"
     }
 
     $directoryEntry = New-Object System.DirectoryServices.DirectoryEntry($searchBase)
