@@ -10,12 +10,13 @@
 .NOTES
     Author: Mike Terrill/2Pint Software
     Date: September 17, 2026
-    Version: 26.09.17
+    Version: 26.09.18
         
     Version history:
     26.09.17: Initial release
     26.09.17: Updated to use raw TCP socket for connectivity test in WinPE/WinRE
     26.09.17: Added transcript logging for debugging purposes
+    26.09.18: Updated to route Format-List output through Write-Host for reliable transcript logging
  
 #>
 
@@ -77,7 +78,8 @@ while ($Elapsed -lt $MaxWaitSeconds) {
 
     if ($NetworkInfo) {
         Write-Host "Network configuration detected." -ForegroundColor Green
-        $NetworkInfo | Format-List
+        # Format-List output isn't reliably captured by Start-Transcript, so route it through Write-Host
+        ($NetworkInfo | Format-List | Out-String).TrimEnd() | Write-Host
         break
     }
 
