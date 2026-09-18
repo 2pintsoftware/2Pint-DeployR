@@ -8,7 +8,7 @@
     . "$PSScriptRoot\Test-DeployRConnection.ps1"
 
 .NOTES
-    Author: Mike Terrill/2Pint Software
+    Author: Mike Terrill/Gary Blok/2Pint Software
     Date: September 17, 2026
     Version: 26.09.18
         
@@ -24,7 +24,7 @@ if (Get-PSProvider TSENV -ErrorAction SilentlyContinue){
     $DeployRServer = ([System.Uri]$TSENV:DEPLOYRHOST).Host
 }
 else {
-    $DeployRServer = "deployr.2pintdemo.net"
+    $DeployRServer = "deployr.company.com"
 }
 
 
