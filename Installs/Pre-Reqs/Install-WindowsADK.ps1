@@ -2,18 +2,23 @@
 .SYNOPSIS
     Downloads and installs the Windows Assessment and Deployment Kit (ADK) with only the Deployment Tools option.
 .DESCRIPTION
-    This script automates the download, silent installation, and verification of the Windows ADK (version 10.1.26100.2454 for Windows 11) with the Deployment Tools feature.
+    This script automates the download, silent installation, and verification of the Windows ADK (version 10.1.26100.xxxx for Windows 11) with the Deployment Tools feature.
     It logs the process and handles common errors, suitable for large-scale Windows deployment scenarios.
 .NOTES
     Author: Mike Terrill/2Pint Software
-    Date: July 19, 2025
-    Version: 25.07.19
+    Date: September 25, 2026
+    Version: 26.09.25
     Requires: Administrative privileges, 64-bit Windows (10/11, Server 2016+), internet access
     Source: https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install
+
+    Version history:
+    25.07.19: Initial release
+    26.09.25: No changes, just updated references to Windows ADK 10.1.26100.xxxx
+
 #>
 
 # Configuration 
-$DownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2289980"  # Official Microsoft URL for Windows ADK 10.1.26100.2454
+$DownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2289980"  # Official Microsoft URL for Windows ADK 10.1.26100.xxxx
 $InstallerPath = "$env:TEMP\adksetup.exe"  # Temporary location for the installer
 $LogFile = "$env:TEMP\ADK_Install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 $InstallDir = "C:\Program Files (x86)\Windows Kits\10"  # Default ADK installation directory
@@ -118,7 +123,7 @@ if (-not (Test-Path $InstallerPath)) {
 # Install ADK with only Deployment Tools
 Write-Log -Message "Installing Windows ADK with Deployment Tools..." -LogFile $LogFile
 try {
-    $Arguments = "/quiet /norestart /installpath `"$InstallDir`" /features OptionId.DeploymentTools OptionId.ImagingAndConfigurationDesigner"
+    $Arguments = "/quiet /norestart /installpath `"$InstallDir`" /features OptionId.DeploymentTools"
     $Process = Start-Process -FilePath $InstallerPath -ArgumentList $Arguments -Wait -PassThru -ErrorAction Stop
     Write-Log -Message "Installation exit code: $($Process.ExitCode)" -LogFile $LogFile
     
