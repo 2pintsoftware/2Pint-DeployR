@@ -1,19 +1,23 @@
 <#
 .SYNOPSIS
-    Downloads and installs the Windows PE add-on for the Windows ADK 10.1.26100.2454 (December 2024).
+    Downloads and installs the Windows PE add-on for the Windows ADK 10.1.26100.xxxx.
 .DESCRIPTION
     This script automates the download, silent installation, and verification of the Windows PE add-on for the Windows ADK.
     It uses registry-based detection with the correct uninstall key and logs the process for troubleshooting.
 .NOTES
     Author: Mike Terrill/2Pint Software
-    Date: July 19, 2025
-    Version: 25.07.19
-    Requires: Administrative privileges, 64-bit Windows (10/11, Server 2016+), Windows ADK 10.1.26100.2454, internet access
+    Date: September 25, 2026
+    Version: 26.09.25
+    Requires: Administrative privileges, 64-bit Windows (10/11, Server 2016+), Windows ADK 10.1.26100.xxxx, internet access
     Source: https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install
+
+    Version history:
+    25.07.19: Initial release
+    26.09.25: Updated the logic to verify the WinPE add-on installation using the name in the uninstall registry key. Updated references to 10.1.26100.xxxx.
 #>
 
 # Configuration
-$DownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2289981"  # Corrected Microsoft URL for Windows PE add-on 10.1.26100.2454
+$DownloadUrl = "https://go.microsoft.com/fwlink/?linkid=2289981"  # Corrected Microsoft URL for Windows PE add-on 10.1.26100.xxxx
 $InstallerPath = "$env:TEMP\adkwinpesetup.exe"  # Temporary location for the installer
 $LogFile = "$env:TEMP\WinPE_Install_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 $InstallDir = "C:\Program Files (x86)\Windows Kits\10"  # Default ADK installation directory
@@ -75,17 +79,39 @@ function Test-WinPEAddOnInstalled {
         [string]$LogFile
     )
 
-    $RegistryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{e0f929f8-610d-469c-bfa1-7961a14eb91b}"
+    $RegistryPath = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+    $TargetDisplayName = "Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons"
 
-    Write-Log -Message "Checking if WinPE add-on is installed via registry at $RegistryPath..." -LogFile $LogFile
+    Write-Log -Message "Checking if WinPE add-on is installed by searching uninstall entries at $RegistryPath..." -LogFile $LogFile
 
     try {
-        if (Test-Path $RegistryPath) {
-            $WinPEProduct = Get-ItemProperty -Path $RegistryPath -ErrorAction Stop
+        if (-not (Test-Path $RegistryPath)) {
+            Write-Log -Message "Uninstall registry path not found: $RegistryPath" -LogFile $LogFile
+            return $false
+        }
+
+        $UninstallKeys = Get-ChildItem -Path $RegistryPath -ErrorAction Stop
+        $WinPEProduct = $null
+
+        foreach ($Key in $UninstallKeys) {
+            try {
+                $Product = Get-ItemProperty -Path $Key.PSPath -ErrorAction Stop
+
+                if ($Product.DisplayName -and $Product.DisplayName -like "*$TargetDisplayName*") {
+                    $WinPEProduct = $Product
+                    break
+                }
+            }
+            catch {
+                # Ignore individual key read errors and continue scanning remaining entries.
+            }
+        }
+
+        if ($WinPEProduct) {
             $DisplayName = $WinPEProduct.DisplayName
             $DisplayVersion = $WinPEProduct.DisplayVersion
             Write-Log -Message "WinPE add-on found in registry. DisplayName: $DisplayName, Version: $DisplayVersion" -LogFile $LogFile
-            
+
             # Optional: Verify key WinPE files for additional confirmation
             $WinPEPath = "$InstallDir\Assessment and Deployment Kit\Windows Preinstallation Environment"
             $CopyPEPath = "$WinPEPath\copype.cmd"
@@ -95,12 +121,12 @@ function Test-WinPEAddOnInstalled {
                 Write-Log -Message "Warning: WinPE add-on registered, but copype.cmd not found at $CopyPEPath." -LogFile $LogFile
             }
             return $true
-        } else {
-            Write-Log -Message "WinPE add-on not found in registry at $RegistryPath." -LogFile $LogFile
-            return $false
         }
+
+        Write-Log -Message "WinPE add-on not found in uninstall entries matching '$TargetDisplayName'." -LogFile $LogFile
+        return $false
     } catch {
-        Write-Log -Message "ERROR: Failed to verify WinPE add-on installation via registry. Error: $($_.Exception.Message)" -LogFile $LogFile
+        Write-Log -Message "ERROR: Failed to verify WinPE add-on installation via uninstall entries. Error: $($_.Exception.Message)" -LogFile $LogFile
         Write-Error "Failed to verify WinPE add-on installation. Error: $($_.Exception.Message)"
         return $false
     }
