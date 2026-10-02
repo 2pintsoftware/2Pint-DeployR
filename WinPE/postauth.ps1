@@ -1,4 +1,4 @@
-<# This Script will automatically be called during the WinPE post-initialization phase
+<# This Script will automatically be called during the WinPE post-authentication phase
 
 More more details how this all works:
 https://documentation.2pintsoftware.com/deployr/getting-started/generate-windows-pe-boot-images/preinit-postinit-postauth-ps1
@@ -11,7 +11,7 @@ To use this script, uncomment the line below to load the Test-DeployRConnection 
 
 
 # Load the Test-DeployRConnection script
-if (Test-path "$PSScriptRoot\Test-DeployRConnection.ps1") {
-    write-host "Loading Test-DeployRConnection.ps1"
-    . "$PSScriptRoot\Test-DeployRConnection.ps1"
+if (Test-path "$PSScriptRoot\Create-ExtraVariables.ps1") {
+    write-host "Loading Create-ExtraVariables.ps1"
+    . "$PSScriptRoot\Create-ExtraVariables.ps1"
 }
