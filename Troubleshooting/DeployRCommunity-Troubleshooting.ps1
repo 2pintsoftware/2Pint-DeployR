@@ -23,7 +23,7 @@ Change Log
 #Keep this updated as needed 
 $DotNetMinVersion = '10.0.3'
 $PowerShellMinVersion = '7.6.3'
-$ADKVersion = '10.1.26100.2454'
+$ADKVersions = @('10.1.26100.2454', '10.1.26100.9457')
 
 # Check for Administrator role
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -36,8 +36,8 @@ $PreReqApps = @(
 [PSCustomObject]@{Title = 'Microsoft .NET Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft Windows Desktop Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft ASP.NET Core'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
 [PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
 [PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
 [PSCustomObject]@{Title = '2Pint Software DeployR Community (bundle)'; Installed = $false; Notes = 'Required for DeployR Community Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
@@ -445,6 +445,7 @@ foreach ($app in $PreReqApps) {
                     Version     = $Version
                     DisplayName = $appitem.DisplayName
                     MinVersion  = $app.MinVersion
+                    AllowedVersions = $app.AllowedVersions
                 }
             }
         }
@@ -467,6 +468,7 @@ foreach ($app in $PreReqApps) {
                 Version     = $Version
                 DisplayName = $found.DisplayName
                 MinVersion  = $app.MinVersion
+                AllowedVersions = $app.AllowedVersions
             }
         }
         
@@ -503,7 +505,15 @@ ForEach-Object {
 foreach ($app in $PreReqAppsStatus) {
     
     if ($app.Installed) {
-        if ($app.MinVersion -and $app.Version -and ([version]$app.Version -lt [version]$app.MinVersion)) {
+        if ($app.AllowedVersions -and $app.Version -and $app.Version -notin $app.AllowedVersions) {
+            Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
+            Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
+            Write-Host "   Allowed Versions: $($app.AllowedVersions -join ', ')" -ForegroundColor DarkGray
+            if ($app.Notes) {
+                Write-Host "   $($app.Notes)" -ForegroundColor DarkGray
+            }
+        }
+        elseif ($app.MinVersion -and $app.Version -and ([version]$app.Version -lt [version]$app.MinVersion)) {
             Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
             Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
             Write-Host "   Minimum Required Version: $($app.MinVersion)" -ForegroundColor DarkGray
@@ -583,14 +593,14 @@ if ($ServerOSVersion -like "10.0.17763*") {
         Write-Host ".NET Framework registry key not found." -ForegroundColor Red
     }
 }
-#Double Check ADK = $ADKVersion is installed
+#Double Check ADK version is supported
 $PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deployment Kit Windows Preinstallation Environment" } | ForEach-Object {
     if ($_.Installed) {
-        if ($_.Version -ne $ADKVersion) {
+        if ($_.Version -notin $ADKVersions) {
             Write-Host "=========================================================================" -ForegroundColor Red
             Write-Host "✗ Windows ADK version is different than the required version." -ForegroundColor Red
             Write-Host "   Installed Version: $($_.Version)" -ForegroundColor DarkGray
-            Write-Host "   Required  Version: $ADKVersion" -ForegroundColor DarkGray
+            Write-Host "   Allowed Versions: $($ADKVersions -join ', ')" -ForegroundColor DarkGray
             Write-Host "   NOTE: $($_.Notes)" -ForegroundColor Yellow
             Write-Host "=========================================================================" -ForegroundColor Red
         }
