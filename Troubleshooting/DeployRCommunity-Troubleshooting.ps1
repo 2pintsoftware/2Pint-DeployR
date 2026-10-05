@@ -15,6 +15,7 @@ USE POWERSHELL 7.  This doesn't work properly from PowerShell 5 Terminal.
 
 Change Log
 - 26.07.26 - Started with DeployR Troubleshooting Script and modified for Community
+- 2026.10.04 - Updated for ADK to allow another version.
 
 #>
 
