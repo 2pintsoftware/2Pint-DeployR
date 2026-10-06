@@ -15,6 +15,7 @@ USE POWERSHELL 7.  This doesn't work properly from PowerShell 5 Terminal.
 
 Change Log
 - 26.07.26 - Started with DeployR Troubleshooting Script and modified for Community
+- 2026.10.04 - Updated for ADK to allow another version.
 
 #>
 
@@ -23,7 +24,7 @@ Change Log
 #Keep this updated as needed 
 $DotNetMinVersion = '10.0.3'
 $PowerShellMinVersion = '7.6.3'
-$ADKVersion = '10.1.26100.2454'
+$ADKVersions = @('10.1.26100.2454', '10.1.26100.9457')
 
 # Check for Administrator role
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -31,13 +32,40 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     exit 1
 }
 
+# Capture machine context for troubleshooting logs
+$OsInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+$ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+$NetworkInfo = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "IPEnabled = true" -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress } | Select-Object -First 1
+$ProcessorInfo = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+$MemoryInfo = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+$CurrentVersionKey = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue
+$UBR = if ($CurrentVersionKey -and $CurrentVersionKey.UBR) { $CurrentVersionKey.UBR } else { 'N/A' }
+
+Write-Host "=========================================================================" -ForegroundColor DarkGray
+Write-Host "Machine Information" -ForegroundColor Cyan
+Write-Host (" Host Name:        {0}" -f $env:COMPUTERNAME) -ForegroundColor White
+Write-Host (" FQDN:             {0}" -f ([System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName)) -ForegroundColor White
+Write-Host (" OS:               {0}" -f $OsInfo.Caption) -ForegroundColor White
+Write-Host (" Version:          {0}" -f $OsInfo.Version) -ForegroundColor White
+Write-Host (" Build:            {0}.{1}" -f $OsInfo.BuildNumber, $UBR) -ForegroundColor White
+Write-Host (" Domain:           {0}" -f $env:USERDOMAIN) -ForegroundColor White
+Write-Host (" Make / Model:     {0} / {1}" -f $ComputerInfo.Manufacturer, $ComputerInfo.Model) -ForegroundColor White
+Write-Host (" Processor:        {0}" -f $ProcessorInfo.Name) -ForegroundColor White
+Write-Host (" Installed RAM:    {0:N0} MB" -f (($MemoryInfo.TotalPhysicalMemory / 1MB))) -ForegroundColor White
+if ($NetworkInfo) {
+    Write-Host (" IP Address:       {0}" -f (($NetworkInfo.IPAddress | Where-Object { $_ -match '\d+\.\d+\.\d+\.\d+' } | Select-Object -First 1))) -ForegroundColor White
+}
+Write-Host (" PowerShell:       {0}" -f $PSVersionTable.PSVersion.ToString()) -ForegroundColor White
+Write-Host (" Timestamp:        {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor White
+Write-Host "=========================================================================" -ForegroundColor DarkGray
+
 #PowerShell Table of Pre-Req Applications:
 $PreReqApps = @(
 [PSCustomObject]@{Title = 'Microsoft .NET Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft Windows Desktop Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
 [PSCustomObject]@{Title = 'Microsoft ASP.NET Core'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; MinVersion = $ADKVersion; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
 [PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
 [PSCustomObject]@{Title = '2Pint Software DeployR'; Installed = $false; Notes = 'Required for DeployR Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
 [PSCustomObject]@{Title = '2Pint Software DeployR Community (bundle)'; Installed = $false; Notes = 'Required for DeployR Community Servers'; ExactMatch = $true; URL = 'https://documentation.2pintsoftware.com/deployr'}
@@ -164,6 +192,19 @@ function Test-CertificateChain {
     
     return $result
 }
+function Normalize-Thumbprint {
+    param(
+        [AllowNull()]
+        [string]$Thumbprint
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Thumbprint)) {
+        return $null
+    }
+
+    return ($Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+}
+
 function Get-InstalledApps
 {
     if (![Environment]::Is64BitProcess) {
@@ -445,6 +486,7 @@ foreach ($app in $PreReqApps) {
                     Version     = $Version
                     DisplayName = $appitem.DisplayName
                     MinVersion  = $app.MinVersion
+                    AllowedVersions = $app.AllowedVersions
                 }
             }
         }
@@ -467,6 +509,7 @@ foreach ($app in $PreReqApps) {
                 Version     = $Version
                 DisplayName = $found.DisplayName
                 MinVersion  = $app.MinVersion
+                AllowedVersions = $app.AllowedVersions
             }
         }
         
@@ -503,7 +546,15 @@ ForEach-Object {
 foreach ($app in $PreReqAppsStatus) {
     
     if ($app.Installed) {
-        if ($app.MinVersion -and $app.Version -and ([version]$app.Version -lt [version]$app.MinVersion)) {
+        if ($app.AllowedVersions -and $app.Version -and $app.Version -notin $app.AllowedVersions) {
+            Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
+            Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
+            Write-Host "   Allowed Versions: $($app.AllowedVersions -join ', ')" -ForegroundColor DarkGray
+            if ($app.Notes) {
+                Write-Host "   $($app.Notes)" -ForegroundColor DarkGray
+            }
+        }
+        elseif ($app.MinVersion -and $app.Version -and ([version]$app.Version -lt [version]$app.MinVersion)) {
             Write-Host " ✗  $($app.Title)  " -ForegroundColor Red
             Write-Host "   Installed Version: $($app.Version)" -ForegroundColor DarkGray
             Write-Host "   Minimum Required Version: $($app.MinVersion)" -ForegroundColor DarkGray
@@ -583,14 +634,14 @@ if ($ServerOSVersion -like "10.0.17763*") {
         Write-Host ".NET Framework registry key not found." -ForegroundColor Red
     }
 }
-#Double Check ADK = $ADKVersion is installed
+#Double Check ADK version is supported
 $PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deployment Kit Windows Preinstallation Environment" } | ForEach-Object {
     if ($_.Installed) {
-        if ($_.Version -ne $ADKVersion) {
+        if ($_.Version -notin $ADKVersions) {
             Write-Host "=========================================================================" -ForegroundColor Red
             Write-Host "✗ Windows ADK version is different than the required version." -ForegroundColor Red
             Write-Host "   Installed Version: $($_.Version)" -ForegroundColor DarkGray
-            Write-Host "   Required  Version: $ADKVersion" -ForegroundColor DarkGray
+            Write-Host "   Allowed Versions: $($ADKVersions -join ', ')" -ForegroundColor DarkGray
             Write-Host "   NOTE: $($_.Notes)" -ForegroundColor Yellow
             Write-Host "=========================================================================" -ForegroundColor Red
         }
@@ -620,27 +671,6 @@ if ($MissingApps) {
 }
 
 
-Write-Host "=========================================================================" -ForegroundColor DarkGray
-Write-Host "Confirming Windows Features for DeployR" -ForegroundColor Cyan
-#Confirm Windows Components
-$RequiredWindowsComponents = @(
-"BranchCache"
-)
-
-foreach ($Component in $RequiredWindowsComponents) {
-    if (Get-WindowsFeature -Name $Component -ErrorAction SilentlyContinue) {
-        Write-Host "✓ $Component is installed." -ForegroundColor Green
-    } else {
-        Write-Host "✗ $Component is NOT installed." -ForegroundColor Red
-        $MissingComponents += $Component
-    }
-}
-if ($MissingComponents) {
-    Write-Host "The following required components are missing:" -ForegroundColor Red
-    Write-Host "Remediation: Run following Command"
-    write-host -ForegroundColor darkgray "Add-WindowsFeature BranchCache"
-    
-}
 #Region Services
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Checking for Services..." -ForegroundColor Cyan
@@ -724,6 +754,51 @@ if ($Installed_2Pint_Software_StifleR_Server){
     else {
         Write-Host "Certificate NOT found." -ForegroundColor Red
     }
+
+write-host "Checking Certificate bound on port 9000 for StifleR" -ForegroundColor Magenta
+$certHash = $Null
+$certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+$normalizedCertHash = Normalize-Thumbprint -Thumbprint $certHash
+
+$normalizedRegThumbprint = Normalize-Thumbprint -Thumbprint $StifleRCertThumbprint
+
+if ($certHash) {
+    Write-Host  "Certificate Thumbprint for HTTPS (port 9000 StifleR): $certHash" -ForegroundColor Cyan
+    if ($normalizedCertHash -eq $normalizedRegThumbprint) {
+        Write-Host "The certificate hash matches the StifleR configuration." -ForegroundColor Green
+        $CertThumbprint = $AllLocalCerts | Where-Object { (Normalize-Thumbprint -Thumbprint $_.Thumbprint) -eq $normalizedCertHash }
+    }
+    else {
+        Write-Host "The certificate hash does NOT match the StifleR configuration." -ForegroundColor Red
+        Write-Host "  Registry value: $StifleRCertThumbprint" -ForegroundColor DarkGray
+        Write-Host "  netsh value   : $certHash" -ForegroundColor DarkGray
+        $CertThumbprint = $AllLocalCerts | Where-Object { (Normalize-Thumbprint -Thumbprint $_.Thumbprint) -eq $normalizedCertHash }
+        if ($CertThumbprint) {
+            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "Certificate NOT found." -ForegroundColor Red
+        }
+    }
+} else {
+    Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
+    # Fallback: Scan common IPs (adjust as needed)
+    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
+    $found = $false
+    foreach ($ip in $ips) {
+        $hash = netsh http show sslcert ipport="$ip`:443" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
+        if ($hash) {
+            Write-Host "Certificate Thumbprint for HTTPS (port 443) on $ip`: $hash" -ForegroundColor Yellow
+            $found = $true
+            break
+        }
+    }
+    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+}
+
     
     #Test the 2Pint Heartbeat URL 'https://api.service.2pintsoftware.com'
     Write-Host "=========================================================================" -ForegroundColor DarkGray
@@ -954,16 +1029,20 @@ if ($Installed_2Pint_Software_DeployR){
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Testing DeployR Certificate..." -ForegroundColor Cyan
     #Test Certificate
-    $CertThumbprintRegValue = $DeployRRegData.CertificateThumbprint
-    Write-Host "DeployR Using Certificate with Thumbprint: $($CertThumbprintRegValue)" -ForegroundColor Cyan
+    $DeployRCertThumbprintRegValue = $DeployRRegData.CertificateThumbprint
+    Write-Host "DeployR Using Certificate with Thumbprint: $($DeployRCertThumbprintRegValue)" -ForegroundColor Cyan
     #Get Certificate from Local Machine Store that matches
-    $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My  | Where-Object { $_.Thumbprint -match $CertThumbprintRegValue }
+    $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { (Normalize-Thumbprint -Thumbprint $_.Thumbprint) -eq (Normalize-Thumbprint -Thumbprint $DeployRCertThumbprintRegValue) }
     if ($CertThumbprint) {
         Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
+        write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
+        write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
+        write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
     }
     else {
         Write-Host "Certificate NOT found." -ForegroundColor Red
     }
+   
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     #Test StifleR Server URL
     Write-Host "Testing Network Connections..." -ForegroundColor Cyan
@@ -1008,54 +1087,6 @@ if ($Installed_2Pint_Software_DeployR){
         Write-Host "DeployR Server URL is NOT accessible." -ForegroundColor Red
     }
     
-}
-Write-Host "=========================================================================" -ForegroundColor DarkGray
-write-host "Checking Certificate... on Ports 9000 & 8050" -ForegroundColor Magenta
-$certHash = $Null
-$certHash = netsh http show sslcert ipport=0.0.0.0:9000 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-
-if ($certHash) {
-    Write-Host  "Certificate Thumbprint for HTTPS (port 9000 StifleR): $certHash" -ForegroundColor Cyan
-    if ($certHash -eq $CertThumbprintRegValue) {
-        Write-Host "The certificate hash matches the DeployR configuration." -ForegroundColor Green
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
-        if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
-        }
-        else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
-        }
-    }
-    else {
-        Write-Host "The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
-        if ($CertThumbprint) {
-            Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
-            write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
-            write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
-            write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
-        }
-        else {
-            Write-Host "Certificate NOT found." -ForegroundColor Red
-        }
-    }
-} else {
-    Write-Host  "No SSL binding found for port 443. Trying all IPs..." -ForegroundColor Yellow
-    # Fallback: Scan common IPs (adjust as needed)
-    $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
-    $found = $false
-    foreach ($ip in $ips) {
-        $hash = netsh http show sslcert ipport="$ip`:443" | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
-        if ($hash) {
-            Write-Host "Certificate Thumbprint for HTTPS (port 443) on $ip`: $hash" -ForegroundColor Yellow
-            $found = $true
-            break
-        }
-    }
-    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
 }
 
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
