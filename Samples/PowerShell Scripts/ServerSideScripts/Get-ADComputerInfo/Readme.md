@@ -33,7 +33,7 @@ You can then use this information to help automate other processes.
 Using this data to grab the OU to feed into the Offline Domain Join step:
 
 First run the script that pulls back the information
-![GetInfo01](Media\GetInfo01.png)
+![GetInfo01](./Media/GetInfo01.png)
 
 Second run a PowerShell step that will set the OU based on the condition that the computer existed.
 ```PowerShell
