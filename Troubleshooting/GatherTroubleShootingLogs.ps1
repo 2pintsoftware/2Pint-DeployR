@@ -11,6 +11,7 @@ Change Log
 - 2026.06.22 - Added grabbing the 2PXE Service Config file if it exists
 - 2026.07.14 - Added grabbing the Application and System event logs
 - 2026.07.28 - Added grabbing certificate information and dumping to txt file
+- 2026.10.07 - Added a log of all Windows services, their current state, and startup mode
 #>
 
 
@@ -206,6 +207,25 @@ Get-ChildItem -Path $2PintRegPath -Recurse | Out-File -FilePath "$TempFolder\2Pi
 $ComputerInfo = Get-ComputerInfo
 $ComputerInfo | Out-File -FilePath "$TempFolder\Computer_Information.txt" -Force
 
+#Get Windows Service Information
+$ServicesLogPath = Join-Path -Path $TempFolder -ChildPath "Windows_Services.txt"
+try {
+    $Services = Get-CimInstance -ClassName Win32_Service -ErrorAction Stop |
+        Select-Object Name, DisplayName, State, StartMode |
+        Sort-Object DisplayName
+
+    "Service inventory captured: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" |
+        Out-File -FilePath $ServicesLogPath -Force
+    $Services | Format-Table -AutoSize |
+        Out-File -FilePath $ServicesLogPath -Append -Width 4096
+    Write-Host "Captured $($Services.Count) Windows services to $ServicesLogPath" -ForegroundColor Green
+}
+catch {
+    "Failed to collect Windows service information: $($_.Exception.Message)" |
+        Out-File -FilePath $ServicesLogPath -Force
+    Write-Warning "Failed to collect Windows service information: $_"
+}
+
 #Region Get Cert Information
 $AllLocalCerts = Get-ChildItem -Path Cert:\LocalMachine\My
 
@@ -348,7 +368,9 @@ if (Test-Path -Path $ZipFilePath){
     Remove-Item -Path $ZipFilePath -Force
 }
 Write-Host "`nCompressing logs into zip file: $ZipFilePath" -ForegroundColor Cyan
-Compress-Archive -Path "$TempFolder\*" -DestinationPath $ZipFilePath -Force 
+Compress-Archive -Path "$TempFolder\*" -DestinationPath $ZipFilePath -Force -ErrorAction Stop
 Write-Host "Compression complete! Logs saved to: $ZipFilePath" -ForegroundColor Green
+Remove-Item -Path $TempFolder -Recurse -Force -ErrorAction Stop
+Write-Host "Temporary troubleshooting folder removed: $TempFolder" -ForegroundColor Gray
 Write-Host "!!! Please send to support@2pintsoftware.com !!!" -ForegroundColor Magenta
 

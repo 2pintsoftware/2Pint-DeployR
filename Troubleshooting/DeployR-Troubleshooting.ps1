@@ -1629,7 +1629,7 @@ if ($Installed_2Pint_Software_PXE_Server) {
         $2PXService = Get-Service -Name '2PXE' -ErrorAction Stop
         if ($2PXService.Status -ne 'Running') {
             Write-Host "2Pint 2PXE service is NOT running." -ForegroundColor Red
-            $startService = Read-Host "Would you like to start the 2PX service? (Y/N)"
+            $startService = Read-Host "Would you like to start the 2PXE service? (Y/N)"
             if ($startService -ieq 'Y') {
                 Start-Service -Name '2PXE' -ErrorAction Stop
                 $2PXService.WaitForStatus('Running', '00:00:30')
@@ -1643,7 +1643,7 @@ if ($Installed_2Pint_Software_PXE_Server) {
         }
 
         if ($2PXService.Status -eq 'Running') {
-            Write-Host "2Pint 2PX service is running." -ForegroundColor Green
+            Write-Host "2Pint 2PXE service is running." -ForegroundColor Green
             Write-Host "  Display Name: $($2PXService.DisplayName)" -ForegroundColor DarkGray
             Write-Host "  Service Name: $($2PXService.Name)" -ForegroundColor DarkGray
             Write-Host "  Start Type:   $($2PXService.StartType)" -ForegroundColor DarkGray
