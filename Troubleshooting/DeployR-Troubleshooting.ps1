@@ -52,6 +52,7 @@ Change Log
 - 2026.07.29 - Updated the check for Infra Services API to provide better feedback if auth is the issue.
 - 2026.08.20 - Added notes about the dashboard not needing IIS, but instead using port 9000
 - 2026.10.04 - Updated for ADK to allow another version.
+- 2026.10.07 - Added 2PXE and iPXEWS service checks with startup verification; iPXEWS starts only when 2PXE is running.
 
 
 #>
@@ -1621,6 +1622,82 @@ if ($Installed_2Pint_Software_DeployR){
     }
 }
 
+#Test if 2PX service is running
+$Global:2PXServiceRunning = $false
+if ($Installed_2Pint_Software_PXE_Server) {
+    try {
+        $2PXService = Get-Service -Name '2PXE' -ErrorAction Stop
+        if ($2PXService.Status -ne 'Running') {
+            Write-Host "2Pint 2PXE service is NOT running." -ForegroundColor Red
+            $startService = Read-Host "Would you like to start the 2PX service? (Y/N)"
+            if ($startService -ieq 'Y') {
+                Start-Service -Name '2PXE' -ErrorAction Stop
+                $2PXService.WaitForStatus('Running', '00:00:30')
+                Write-Host "Waiting 10 seconds to verify the 2PXE service remains running..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 10
+                $2PXService.Refresh()
+            }
+            else {
+                Write-Host "Service start aborted by user." -ForegroundColor Yellow
+            }
+        }
+
+        if ($2PXService.Status -eq 'Running') {
+            Write-Host "2Pint 2PX service is running." -ForegroundColor Green
+            Write-Host "  Display Name: $($2PXService.DisplayName)" -ForegroundColor DarkGray
+            Write-Host "  Service Name: $($2PXService.Name)" -ForegroundColor DarkGray
+            Write-Host "  Start Type:   $($2PXService.StartType)" -ForegroundColor DarkGray
+            $Global:2PXServiceRunning = $true
+        }
+        else {
+            Write-Host "2Pint 2PXE service did not reach the Running state." -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "Unable to start or verify the 2PXE service: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+#Test if iPXE WS service is running
+$Global:iPXEWSServiceRunning = $false
+if ($Installed_2Pint_Software_iPXE_Anywhere_WebService) {
+    if (-not $Global:2PXServiceRunning) {
+        Write-Host "Skipping iPXE WS service because the 2PXE service is not running." -ForegroundColor Yellow
+    }
+    else {
+        try {
+            $iPXEWSService = Get-Service -Name 'iPXEWS' -ErrorAction Stop
+            if ($iPXEWSService.Status -ne 'Running') {
+                Write-Host "2Pint iPXE WS service is NOT running." -ForegroundColor Red
+                $startService = Read-Host "Would you like to start the iPXE WS service? (Y/N)"
+                if ($startService -ieq 'Y') {
+                    Start-Service -Name 'iPXEWS' -ErrorAction Stop
+                    $iPXEWSService.WaitForStatus('Running', '00:00:30')
+                    Write-Host "Waiting 10 seconds to verify the iPXEWS service remains running..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds 10
+                    $iPXEWSService.Refresh()
+                }
+                else {
+                    Write-Host "Service start aborted by user." -ForegroundColor Yellow
+                }
+            }
+
+            if ($iPXEWSService.Status -eq 'Running') {
+                Write-Host "2Pint iPXE WS service is running." -ForegroundColor Green
+                Write-Host "  Display Name: $($iPXEWSService.DisplayName)" -ForegroundColor DarkGray
+                Write-Host "  Service Name: $($iPXEWSService.Name)" -ForegroundColor DarkGray
+                Write-Host "  Start Type:   $($iPXEWSService.StartType)" -ForegroundColor DarkGray
+                $Global:iPXEWSServiceRunning = $true
+            }
+            else {
+                Write-Host "2Pint iPXE WS service did not reach the Running state." -ForegroundColor Red
+            }
+        }
+        catch {
+            Write-Host "Unable to start or verify the iPXEWS service: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+}
 #endRegion Services
 
 #Confirm StifleR Registry Settings
