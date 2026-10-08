@@ -54,6 +54,7 @@ Change Log
 - 2026.10.04 - Updated for ADK to allow another version.
 - 2026.10.07 - Added 2PXE and iPXEWS service checks with startup verification; iPXEWS starts only when 2PXE is running.
 - 2026.10.07 - Beta copy adds an end-of-run summary of detected issues.
+- 2026.10.07 - Added opt-in .NET, PowerShell, and Windows ADK prerequisite installers to the summary.
 
 
 #>
@@ -2527,6 +2528,104 @@ if ($IISMimeTypeUpdateRequired) {
     Write-Host "Skipping IIS MIME type remediation prompt (temporarily disabled)." -ForegroundColor DarkGray
 }
 
+function Invoke-PreReqInstaller {
+    param (
+        [Parameter(Mandatory)]
+        [string]$ScriptName
+    )
+
+    $InstallerPath = Join-Path -Path $PSScriptRoot -ChildPath "..\Installs\Pre-Reqs\$ScriptName"
+    if (-not (Test-Path -LiteralPath $InstallerPath)) {
+        Write-Warning "Installer script was not found: $InstallerPath"
+        return $false
+    }
+
+    $PowerShellExecutable = Join-Path -Path $PSHOME -ChildPath 'pwsh.exe'
+
+    if (-not (Test-Path -LiteralPath $PowerShellExecutable)) {
+        Write-Warning "PowerShell executable was not found: $PowerShellExecutable"
+        return $false
+    }
+
+    $ArgumentList = "-NoProfile -ExecutionPolicy Bypass -File `"$InstallerPath`""
+    try {
+        Write-Host "Starting prerequisite installer: $ScriptName" -ForegroundColor Cyan
+        $InstallerProcess = Start-Process -FilePath $PowerShellExecutable -ArgumentList $ArgumentList -Wait -PassThru -NoNewWindow -ErrorAction Stop
+        if ($InstallerProcess.ExitCode -eq 3010) {
+            Write-Warning "$ScriptName completed successfully, but a restart is required."
+            return $true
+        }
+        if ($InstallerProcess.ExitCode -ne 0) {
+            Write-Warning "$ScriptName failed with exit code $($InstallerProcess.ExitCode)."
+            return $false
+        }
+
+        Write-Host "$ScriptName completed successfully." -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Warning "Failed to run ${ScriptName}: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Start-PowerShell76InstallerAfterSessionExit {
+    $InstallerPath = Join-Path -Path $PSScriptRoot -ChildPath '..\Installs\Pre-Reqs\Install-PowerShell76X.ps1'
+    $PowerShellExecutable = Join-Path -Path $env:WINDIR -ChildPath 'System32\WindowsPowerShell\v1.0\powershell.exe'
+
+    if (-not (Test-Path -LiteralPath $InstallerPath)) {
+        Write-Warning "Installer script was not found: $InstallerPath"
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath $PowerShellExecutable)) {
+        Write-Warning "Windows PowerShell 5.1 was not found: $PowerShellExecutable"
+        return $false
+    }
+
+    $EscapedInstallerPath = $InstallerPath.Replace("'", "''")
+    $ParentProcessId = $PID
+    $ChildCommand = "while (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }; & '$EscapedInstallerPath'"
+    $ArgumentList = "-NoProfile -ExecutionPolicy Bypass -Command `"$ChildCommand`""
+
+    try {
+        Start-Process -FilePath $PowerShellExecutable -ArgumentList $ArgumentList -ErrorAction Stop | Out-Null
+        Write-Host 'Windows PowerShell 5.1 is ready. The installer will start after this PowerShell 7 session closes.' -ForegroundColor Yellow
+        return $true
+    }
+    catch {
+        Write-Warning "Failed to start the Windows PowerShell 5.1 installer process: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+$DotNetApps = @($PreReqAppsStatus | Where-Object {
+    $_.Title -in @('Microsoft .NET Runtime', 'Microsoft Windows Desktop Runtime', 'Microsoft ASP.NET Core')
+})
+$DotNetNeedsInstall = $false
+foreach ($DotNetApp in $DotNetApps) {
+    if (-not $DotNetApp.Installed -or -not $DotNetApp.Version) {
+        $DotNetNeedsInstall = $true
+        break
+    }
+    try {
+        if ([version]$DotNetApp.Version -lt [version]$DotNetMinVersion) {
+            $DotNetNeedsInstall = $true
+            break
+        }
+    }
+    catch {
+        $DotNetNeedsInstall = $true
+        break
+    }
+}
+
+$PowerShellNeedsInstall = [version]$PSVersionTable.PSVersion -lt [version]$PowerShellMinVersion
+$CloseCurrentPowerShellSession = $false
+$AdkApps = @($PreReqAppsStatus | Where-Object { $_.Title -match '^Windows Assessment and Deployment Kit' })
+$AdkNeedsInstall = @($AdkApps | Where-Object {
+    -not $_.Installed -or -not $_.Version -or $_.Version -notin $ADKVersions
+}).Count -gt 0
+
 $SummaryIssues = [System.Collections.Generic.List[string]]::new()
 
 $ProblemApps = @($PreReqAppsStatus | Where-Object {
@@ -2550,6 +2649,15 @@ foreach ($App in $ProblemApps) {
 
 if ($MissingComponents) {
     $SummaryIssues.Add("Required Windows features are missing: $($MissingComponents -join ', ')")
+}
+if ($DotNetNeedsInstall) {
+    $SummaryIssues.Add(".NET 10 runtime requirements are missing or below $DotNetMinVersion. Recommended: run https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-DotNetRuntimes100X.ps1")
+}
+if ($PowerShellNeedsInstall) {
+    $SummaryIssues.Add("The current PowerShell version ($($PSVersionTable.PSVersion)) is below $PowerShellMinVersion. Run the PowerShell 7.6 installer from Windows PowerShell 5.1: https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-PowerShell76X.ps1")
+}
+if ($AdkNeedsInstall) {
+    $SummaryIssues.Add("Windows ADK or WinPE Add-on is missing or unsupported. Uninstall any existing ADK/WinPE versions, then run https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-WindowsADK.ps1 and https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-WindowsADKWinPE.ps1.")
 }
 
 $ServiceChecks = @()
@@ -2643,7 +2751,44 @@ else {
 }
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 
+if ($DotNetNeedsInstall) {
+    $InstallResponse = Read-Host "Would you like to run the .NET 10 installer now? (Y/N)"
+    if ($InstallResponse -ieq 'Y') {
+        if (Invoke-PreReqInstaller -ScriptName 'Install-DotNetRuntimes100X.ps1') {
+            Write-Host "Rerun this troubleshooting script to verify the .NET installation." -ForegroundColor Yellow
+        }
+    }
+}
+
+if ($PowerShellNeedsInstall) {
+    $InstallResponse = Read-Host "Run the PowerShell 7.6 installer from Windows PowerShell 5.1 now? Y will close this PowerShell 7 session before setup begins. (Y/N)"
+    if ($InstallResponse -ieq 'Y') {
+        if (Start-PowerShell76InstallerAfterSessionExit) {
+            $CloseCurrentPowerShellSession = $true
+        }
+    }
+}
+
+if ($AdkNeedsInstall) {
+    $InstallResponse = Read-Host "After uninstalling any existing ADK/WinPE versions, would you like to run both ADK installers now? (Y/N)"
+    if ($InstallResponse -ieq 'Y') {
+        $AdkInstallSucceeded = Invoke-PreReqInstaller -ScriptName 'Install-WindowsADK.ps1'
+        if ($AdkInstallSucceeded) {
+            if (Invoke-PreReqInstaller -ScriptName 'Install-WindowsADKWinPE.ps1') {
+                Write-Host "Rerun this troubleshooting script to verify the ADK and WinPE installation. Restart first if either installer requested it." -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Warning 'The WinPE Add-on installer was not run because Windows ADK installation did not succeed.'
+        }
+    }
+}
+
 Stop-Transcript
 Write-Host ""
 Write-Host "Transcript Recorded to $TranscriptFilePath" -ForegroundColor Green
 Write-Host "=========================================================================" -ForegroundColor DarkGray
+if ($CloseCurrentPowerShellSession) {
+    Write-Host 'Closing this PowerShell 7 session. The Windows PowerShell 5.1 installer will continue and install PowerShell 7.6.' -ForegroundColor Yellow
+    exit
+}
