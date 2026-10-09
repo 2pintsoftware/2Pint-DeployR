@@ -2407,6 +2407,29 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
 
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Checking Firewall Rules to ensure Ports are Open" -ForegroundColor Cyan
+$FirewallProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+if ($FirewallProfiles) {
+    foreach ($FirewallProfile in $FirewallProfiles) {
+        $FirewallProfileState = if ($FirewallProfile.Enabled) { 'Enabled' } else { 'Disabled' }
+        $FirewallProfileColor = if ($FirewallProfile.Enabled) { 'Green' } else { 'Red' }
+        Write-Host "Windows Firewall $($FirewallProfile.Name) profile: $FirewallProfileState" -ForegroundColor $FirewallProfileColor
+    }
+
+    $EnabledFirewallProfiles = @($FirewallProfiles | Where-Object { $_.Enabled }).Count
+    if ($EnabledFirewallProfiles -eq 0) {
+        Write-Host "Windows Firewall is disabled for all profiles." -ForegroundColor Red
+    }
+    elseif ($EnabledFirewallProfiles -eq @($FirewallProfiles).Count) {
+        Write-Host "Windows Firewall is enabled for all profiles." -ForegroundColor Green
+    }
+    else {
+        Write-Host "Windows Firewall is enabled for some profiles and disabled for others." -ForegroundColor Yellow
+    }
+}
+else {
+    Write-Host "Unable to determine Windows Firewall profile status." -ForegroundColor Yellow
+}
+
 $Ports = Get-NetFirewallPortFilter
 $InboundRules = Get-NetFirewallRule -Direction Inbound
 foreach ($FirewallRule in $FirewallRules){
