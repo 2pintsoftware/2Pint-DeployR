@@ -70,16 +70,17 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 #PowerShell Table of Pre-Req Applications:
+$OptionalSqlPrereqNote = 'Not required when using SQLite or off-box SQL Server.'
 $PreReqApps = @(
-[PSCustomObject]@{Title = 'Microsoft .NET Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Microsoft Windows Desktop Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Microsoft ASP.NET Core'; Installed = $false ; MinVersion = $DotNetMinVersion; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
-[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
-[PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; URL = 'https://aka.ms/powershell-release?tag=lts'}
-[PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
-[PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
-[PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
+[PSCustomObject]@{Title = 'Microsoft .NET Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; Notes = $null; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
+[PSCustomObject]@{Title = 'Microsoft Windows Desktop Runtime'; Installed = $false ; MinVersion = $DotNetMinVersion; Notes = $null; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
+[PSCustomObject]@{Title = 'Microsoft ASP.NET Core'; Installed = $false ; MinVersion = $DotNetMinVersion; Notes = $null; URL = 'https://dotnet.microsoft.com/en-us/download/dotnet/8.0'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; Notes = $null; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'Windows Assessment and Deployment Kit Windows Preinstallation Environment Add-ons'; Installed = $false; AllowedVersions = $ADKVersions; ExactMatch = $true; Notes = $null; URL = 'https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install'}
+[PSCustomObject]@{Title = 'PowerShell 7-x64'; Installed = $false; MinVersion = $PowerShellMinVersion; Notes = $null; URL = 'https://aka.ms/powershell-release?tag=lts'}
+[PSCustomObject]@{Title = 'Microsoft SQL Server'; Installed = $false; Notes = $OptionalSqlPrereqNote; URL = 'https://www.microsoft.com/en-us/download/details.aspx?id=104781'}
+[PSCustomObject]@{Title = 'SQL Server Management Studio'; Installed = $false; Notes = $OptionalSqlPrereqNote; URL = 'https://learn.microsoft.com/en-us/ssms/install/install'}
+[PSCustomObject]@{Title = 'Microsoft Visual C++ v14 Redistributable (x64)'; Installed = $false; Notes = $null; URL = 'https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170'}
 )
 
 $2PintSoftware = @(
@@ -1331,9 +1332,14 @@ foreach ($app in $PreReqAppsStatus) {
         }
     }
     else {
-        Write-Host " ✗  $($app.Title)" -ForegroundColor Red
-        if ($app.Notes) {
-            Write-Host " $($app.Notes)" -ForegroundColor Red
+        if ($app.Notes -eq $OptionalSqlPrereqNote) {
+            Write-Host " -  $($app.Title) (not installed; $($app.Notes))" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host " ✗  $($app.Title)" -ForegroundColor Red
+            if ($app.Notes) {
+                Write-Host " $($app.Notes)" -ForegroundColor Red
+            }
         }
     }
 }
@@ -1408,7 +1414,7 @@ $PreReqAppsStatus | Where-Object { $_.Title -match "Windows Assessment and Deplo
 }
 
 
-$MissingApps = $PreReqAppsStatus | Where-Object { $_.Installed -eq $false }
+$MissingApps = $PreReqAppsStatus | Where-Object { $_.Installed -eq $false -and $_.Notes -ne $OptionalSqlPrereqNote }
 if ($MissingApps) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "The following Pre-Requisite Applications are NOT installed:" -ForegroundColor Red
