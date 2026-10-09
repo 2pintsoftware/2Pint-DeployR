@@ -1,4 +1,8 @@
 
+if (-not (Test-Path -LiteralPath "$env:windir\System32\inetsrv\config\applicationHost.config")) {
+    Write-Host 'IIS not installed, which is fine, it was optional'
+    return
+}
 
 #region Functions
 Function Get-ActiveNetworkDomainSuffix {

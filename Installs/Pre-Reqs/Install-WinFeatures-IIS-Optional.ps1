@@ -1,5 +1,5 @@
-# This installs BranchCache & IIS on the Server.  FYI, IIS is NOT required for DeployR or the StifleR Dashboard, it's handy for hosting extra files, but completely optional.
-# When it is useful?  If you have iPXE WS, it's really nice for example.
+# IIS is optional for DeployR and the StifleR Dashboard. Install it when using
+# this server to host additional files, such as iPXE web content.
 
 $ErrorActionPreference = 'Stop'
 
@@ -11,8 +11,6 @@ try {
     Write-Host "ProductType: $productType"
 
     if ($productType -eq 1) {
-        Write-Host "Windows client OS detected. Using DISM for IIS features and BranchCache cmdlets for BranchCache."
-
         $clientFeatures = @(
             'IIS-WebServerRole',
             'IIS-WindowsAuthentication'
@@ -41,47 +39,24 @@ try {
                 Write-Host "Feature enabled and reboot required: $feature"
             }
         }
-
-        if (-not (Get-Command Enable-BCDistributed -ErrorAction SilentlyContinue)) {
-            throw "BranchCache PowerShell cmdlets are not available on this device."
-        }
-
-        $bcStatus = Get-BCStatus -ErrorAction SilentlyContinue
-
-        if ($bcStatus -and $bcStatus.BranchCacheIsEnabled) {
-            Write-Host "BranchCache is already enabled."
-        }
-        else {
-            Write-Host "Enabling BranchCache in Distributed Cache mode..."
-            Enable-BCDistributed -Force
-        }
-
-        $bcStatus = Get-BCStatus
-        Write-Host "BranchCache enabled: $($bcStatus.BranchCacheIsEnabled)"
-        Write-Host "BranchCache client mode: $($bcStatus.ClientConfiguration.CurrentClientMode)"
     }
-    elseif ($productType -in 2,3) {
-        Write-Host "Windows Server OS detected. Using ServerManager."
-
+    elseif ($productType -in 2, 3) {
         Import-Module ServerManager -ErrorAction Stop
 
-        $result = Install-WindowsFeature `
-            -Name Web-Server, Web-Windows-Auth, BranchCache `
-            -IncludeManagementTools
-
+        $result = Install-WindowsFeature -Name Web-Server, Web-Windows-Auth -IncludeManagementTools
         if (-not $result.Success) {
-            throw "Install-WindowsFeature reported failure."
+            throw 'Install-WindowsFeature reported failure for IIS.'
         }
 
         if ($result.RestartNeeded -ne 'No') {
-            Write-Host "One or more features installed. Restart required: $($result.RestartNeeded)"
+            Write-Host "IIS installed. Restart required: $($result.RestartNeeded)"
         }
     }
     else {
         throw "Unknown ProductType value: $productType"
     }
 
-    Write-Host "Configuration completed successfully."
+    Write-Host 'Optional IIS configuration completed successfully.'
 }
 catch {
     Write-Error $_.Exception.Message

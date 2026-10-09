@@ -22,10 +22,16 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-DotNetRuntimes100X.ps1)
 ```
 
-- Install-WinFeatures.ps1
+- Install-WinFeatures-BranchCache-Required.ps1
 
 ``` PowerShell
-iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures.ps1)
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures-BranchCache-Required.ps1)
+```
+
+- Install-WinFeatures-IIS-Optional.ps1 [OPTIONAL, useful for hosting additional files such as iPXE web content]
+
+``` PowerShell
+iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures-IIS-Optional.ps1)
 ```
 
 - Install-SQLExpress2025.ps1 [OPTIONAL for DeployR, recommended to use SQLLite for DeployR, but needed for iPXE Web Service]

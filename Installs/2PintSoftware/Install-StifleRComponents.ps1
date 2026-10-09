@@ -155,8 +155,13 @@ write-host "Using the following install commands: $arguments" #uncomment this li
 start-process "msiexec.exe" -arg $arguments -Wait
 
 # Create the StifleR Dashboard IIS Virtual Directory
-Import-Module WebAdministration
-New-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard" -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'
+if (Test-Path -LiteralPath "$env:windir\System32\inetsrv\config\applicationHost.config") {
+    Import-Module WebAdministration -ErrorAction Stop
+    New-WebVirtualDirectory -Site "Default Web Site" -Name "StifleRDashboard" -PhysicalPath 'C:\Program Files\2Pint Software\StifleR Dashboards\Dashboard Files'
+}
+else {
+    Write-Host 'IIS not installed, skipping StifleR Dashboard IIS virtual directory.'
+}
 
 # Accessing server locally with fqdn can cause authentication prompt loop on workgroup server
 <#
@@ -519,4 +524,15 @@ Start-Service -Name StifleRWmiAgent
 #Install StifleR Dashboard
 Install-StifleRDashboard -msifile $Dashboard.FullName
 Set-StifleRServerConfiguration -fqdn $fqdn
+
+#Create StifleR Dashboard shortcut on desktop
+$desktopPath = Join-Path -Path $env:PUBLIC -ChildPath 'Desktop'
+$shortcutPath = Join-Path -Path $desktopPath -ChildPath 'StifleR Dashboard.url'
+New-Item -ItemType Directory -Path $desktopPath -Force | Out-Null
+$shortcutContent = @"
+[InternetShortcut]
+URL=https://$($fqdn):9000/Dashboard
+"@
+Set-Content -LiteralPath $shortcutPath -Value $shortcutContent.Trim() -Encoding ASCII
+Write-Host "Created StifleR Dashboard shortcut: https://$($fqdn):9000/Dashboard"
 
