@@ -28,13 +28,13 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-WinFeatures.ps1)
 ```
 
-- Install-SQLExpress2025.ps1
+- Install-SQLExpress2025.ps1 [OPTIONAL for DeployR, recommended to use SQLLite for DeployR, but needed for iPXE Web Service]
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQLExpress2025.ps1)
 ```
 
-- Install-SQL2025CU.ps1
+- Install-SQL2025CU.ps1 [OPTIONAL for DeployR, recommended to use SQLLite for DeployR, but needed for iPXE Web Service]
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SQL2025CU.ps1)
@@ -59,13 +59,13 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-VCRedist-x64.ps1)
 ```
 
-- Configure-SQLExpress.ps1
+- Configure-SQLExpress.ps1 [OPTIONAL for DeployR, recommended to use SQLLite for DeployR, but needed for iPXE Web Service]
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Configure-SQLExpress.ps1)
 ```
 
-- Install-SSMS22.ps1
+- Install-SSMS22.ps1 [OPTIONAL for DeployR, recommended to use SQLLite for DeployR, but needed for iPXE Web Service]
 
 ``` PowerShell
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/Pre-Reqs/Install-SMSS22.ps1)
@@ -77,8 +77,8 @@ This software is available to 2Pint Software DeployR Customers, if you don't hav
 
 For a DeployR Server, this would be the install order of 2Pint Software components:
 
-- 2PXE
-- iPXE WS
+- 2PXE [Optional, needed if you want to PXE boot machines]
+- iPXE WS [Optional, requires 2PXE, and used for advanced PXE boot scenarios, requires SQL Express]
 - StifleR Server
 - StifleR Dashboard
 - DeployR
