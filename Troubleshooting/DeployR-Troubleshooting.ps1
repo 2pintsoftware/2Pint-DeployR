@@ -53,6 +53,7 @@ Change Log
 - 2026.08.20 - Added notes about the dashboard not needing IIS, but instead using port 9000
 - 2026.10.04 - Updated for ADK to allow another version.
 - 2026.10.07 - Added 2PXE and iPXEWS service checks with startup verification; iPXEWS starts only when 2PXE is running.
+- 2026.10.09 - Added firewall profile status, clarified optional SQL prerequisites, skipped local SQL permission checks when SQL Server is absent, and grouped DeployR/iPXE database connection reporting.
 
 
 #>
@@ -2035,78 +2036,122 @@ if ($Installed_2Pint_Software_DeployR){
         }
         write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
+    #Check SQL Principal Rights for NT AUTHORITY\SYSTEM
+    if ($Installed_Microsoft_SQL_Server -and @($SQLInstances).Count -gt 0) {
+        Write-Host "=========================================================================" -ForegroundColor DarkGray
+        Write-Host "Testing NT AUTHORITY\SYSTEM permissions on local SQL Express..." -ForegroundColor Cyan
+        $out = Test-SystemSqlPermissions -Instance $SQLInstances.ConnectionString
+        if ($out.Error) {
+            Write-Host "Error: $($out.Error)" -ForegroundColor Red
+            Write-Host "Please Manually Check Permissions on Database Instances" -ForegroundColor Cyan
+            Write-Host "Would you like to try to automatically add SYSTEM to the Instance $($SQLInstances.InstanceName)  (Y/N): " -ForegroundColor Yellow -NoNewline
+            $response = Read-Host
+            if ($response -eq 'Y' -or $response -eq 'y') {
+                try {
+                    $SetSQLPerm = Set-SqlServerPermissions -InstanceName $($SQLInstances.InstanceName)
+                }
+                catch {
+                    Write-Host "Failed to set permissions: $_" -ForegroundColor Red
+                }
+            }
+        }
+        else {
+            Write-Host "Instance: $($out.Instance)" -ForegroundColor Green
+            Write-Host "  LoginExists: $($out.LoginExists)" -ForegroundColor ($(if ($out.LoginExists) {'Green'} else {'Red'}))
+            Write-Host "  IsSysadmin : $($out.IsSysadmin)" -ForegroundColor ($(if ($out.IsSysadmin) {'Green'} else {'Yellow'}))
+            Write-Host "  IsDbCreator: $($out.IsDbCreator)" -ForegroundColor ($(if ($out.IsDbCreator) {'Green'} else {'Yellow'}))
+        }
+        Write-Host "=========================================================================" -ForegroundColor DarkGray
+        Write-Host "Checking NT AUTHORITY\SYSTEM db_owner permissions for all databases..." -ForegroundColor Cyan
+        $dbOut = Test-SqlDatabases -Instance $SQLInstances.ConnectionString
+        if ($dbOut.Error) {
+            Write-Host "Error: Cannot check permissions - failed to get database list" -ForegroundColor Red
+        }
+        elseif ($dbOut.Databases.Count -eq 0) {
+            Write-Host "No user databases found to check" -ForegroundColor Yellow
+        }
+        else {
+            # Extract database names and check permissions
+            $dbNames = $dbOut.Databases | ForEach-Object { $_.Name }
+            $dbOwnerOut = Test-SystemDatabaseOwnership -Instance $SQLInstances.ConnectionString -DatabaseNames $dbNames
+
+            if ($dbOwnerOut.Error) {
+                Write-Host "Error: $($dbOwnerOut.Error)" -ForegroundColor Red
+            }
+            else {
+                Write-Host "Instance: $($dbOwnerOut.Instance)" -ForegroundColor Green
+                foreach ($dbPerm in $dbOwnerOut.DatabasePermissions) {
+                    if (-not $dbPerm.DbExists) {
+                        Write-Host "  Database '$($dbPerm.SearchName)': DATABASE NOT FOUND" -ForegroundColor Red
+                    }
+                    else {
+                        $color = if ($dbPerm.HasDbOwner) {'Green'} else {'Red'}
+                        $status = if ($dbPerm.HasDbOwner) {'HAS db_owner'} else {'MISSING db_owner'}
+                        Write-Host "  Database '$($dbPerm.ActualDbName)': $status" -ForegroundColor $color
+                    }
+                }
+            }
+        }
+    }
+    else {
+        Write-Host "Skipping local SQL permission checks because SQL Server is not installed on this server." -ForegroundColor DarkGray
+    }
+}
+
+Write-Host "=========================================================================" -ForegroundColor DarkGray
+Write-Host "Testing DB Connection Strings" -ForegroundColor Cyan
+if ($Installed_2Pint_Software_DeployR) {
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
+        Write-Host "DeployR Database Connection String" -ForegroundColor DarkCyan
         $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
         if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
-            Write-Host " DeployR SQL Server Instance in Registry matches detected SQL Instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
+            Write-Host "  Registry SQL instance matches detected SQL instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
         }
         else {
-            Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
-            Write-Host "     DeployR SQL Server Instance in Registry does NOT match detected SQL Instance." -ForegroundColor Red
-            Write-Host "      Registry Instance: $($DeployRegDataSQLServerInstanceString)" -ForegroundColor DarkGray
-            Write-Host "      Detected Instance: $($SQLInstances.InstanceName)" -ForegroundColor DarkGray
-            Write-Host "!!!!!=============================================================================!!!!!" -ForegroundColor Red
+            Write-Host "  Registry SQL instance does NOT match the detected local SQL instance." -ForegroundColor Red
+            Write-Host "  Registry SQL instance: $($DeployRegDataSQLServerInstanceString)" -ForegroundColor DarkGray
+            Write-Host "  Detected local SQL instance: $($SQLInstances.InstanceName)" -ForegroundColor DarkGray
         }
-        Write-Host " Testing DeployR SQL Connection string from Registry... " -ForegroundColor Cyan
-        write-host "  $($DeployRRegData.ConnectionString)"
+        Write-Host "  Connection String: $($DeployRRegData.ConnectionString)" -ForegroundColor DarkGray
         Test-SQLConnection -ConnectionString $DeployRRegData.ConnectionString
     }
-    #Check SQL Principal Rights for NT AUTHORITY\SYSTEM
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Testing NT AUTHORITY\SYSTEM permissions on local SQL Express..." -ForegroundColor Cyan
-    $out = Test-SystemSqlPermissions -Instance $SQLInstances.ConnectionString
-    if ($out.Error) {
-        Write-Host "Error: $($out.Error)" -ForegroundColor Red
-        Write-Host "Please Manually Check Permissions on Database Instances" -ForegroundColor Cyan
-        Write-Host "Would you like to try to automatically add SYSTEM to the Instance $($SQLInstances.InstanceName)  (Y/N): " -ForegroundColor Yellow -NoNewline
-        $response = Read-Host
-        if ($response -eq 'Y' -or $response -eq 'y') {
-            try {
-                $SetSQLPerm = Set-SqlServerPermissions -InstanceName $($SQLInstances.InstanceName)
-            }
-            catch {
-                Write-Host "Failed to set permissions: $_" -ForegroundColor Red
-            }
-        }
-    }
     else {
-        Write-Host "Instance: $($out.Instance)" -ForegroundColor Green
-        Write-Host "  LoginExists: $($out.LoginExists)" -ForegroundColor ($(if ($out.LoginExists) {'Green'} else {'Red'}))
-        Write-Host "  IsSysadmin : $($out.IsSysadmin)" -ForegroundColor ($(if ($out.IsSysadmin) {'Green'} else {'Yellow'}))
-        Write-Host "  IsDbCreator: $($out.IsDbCreator)" -ForegroundColor ($(if ($out.IsDbCreator) {'Green'} else {'Yellow'}))
+        Write-Host "DeployR database connection string is not configured." -ForegroundColor Yellow
     }
-    Write-Host "=========================================================================" -ForegroundColor DarkGray
-    Write-Host "Checking NT AUTHORITY\SYSTEM db_owner permissions for all databases..." -ForegroundColor Cyan
-    $dbOut = Test-SqlDatabases -Instance $SQLInstances.ConnectionString
-    if ($dbOut.Error) {
-        Write-Host "Error: Cannot check permissions - failed to get database list" -ForegroundColor Red
-    }
-    elseif ($dbOut.Databases.Count -eq 0) {
-        Write-Host "No user databases found to check" -ForegroundColor Yellow
-    }
-    else {
-        # Extract database names and check permissions
-        $dbNames = $dbOut.Databases | ForEach-Object { $_.Name }
-        $dbOwnerOut = Test-SystemDatabaseOwnership -Instance $SQLInstances.ConnectionString -DatabaseNames $dbNames
-        
-        if ($dbOwnerOut.Error) {
-            Write-Host "Error: $($dbOwnerOut.Error)" -ForegroundColor Red
-        }
-        else {
-            Write-Host "Instance: $($dbOwnerOut.Instance)" -ForegroundColor Green
-            foreach ($dbPerm in $dbOwnerOut.DatabasePermissions) {
-                if (-not $dbPerm.DbExists) {
-                    Write-Host "  Database '$($dbPerm.SearchName)': DATABASE NOT FOUND" -ForegroundColor Red
-                }
-                else {
-                    $color = if ($dbPerm.HasDbOwner) {'Green'} else {'Red'}
-                    $status = if ($dbPerm.HasDbOwner) {'HAS db_owner'} else {'MISSING db_owner'}
-                    Write-Host "  Database '$($dbPerm.ActualDbName)': $status" -ForegroundColor $color
+}
+
+if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
+    $iPXEWSConnectionInfo = @(
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'; ValueName = 'ConnectionString' }
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'ConnectionString' }
+        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'AdvancedConnectionString' }
+    )
+
+    $iPXEWSConnectionStringFound = $false
+    $testediPXEWSConnectionStrings = @()
+    foreach ($regItem in $iPXEWSConnectionInfo) {
+        if (Test-Path -Path $regItem.Path) {
+            $iPXEWSRegData = Get-ItemProperty -Path $regItem.Path -ErrorAction SilentlyContinue
+            if ($iPXEWSRegData -and -not [string]::IsNullOrWhiteSpace($iPXEWSRegData.($regItem.ValueName))) {
+                $candidateConnectionString = $iPXEWSRegData.($regItem.ValueName)
+                if ($testediPXEWSConnectionStrings -notcontains $candidateConnectionString) {
+                    $testediPXEWSConnectionStrings += $candidateConnectionString
+                    $iPXEWSConnectionStringFound = $true
+                    Write-Host "iPXE Anywhere Web Service Database Connection String" -ForegroundColor DarkCyan
+                    Write-Host "  Registry Setting: $($regItem.Path)::$($regItem.ValueName)" -ForegroundColor DarkGray
+                    Write-Host "  Connection String: $candidateConnectionString" -ForegroundColor DarkGray
+                    Test-SQLConnection -ConnectionString $candidateConnectionString
                 }
             }
         }
     }
-    
+
+    if (-not $iPXEWSConnectionStringFound) {
+        Write-Host "iPXE WS SQL Connection String is NOT configured in either legacy or current registry locations." -ForegroundColor Red
+    }
+}
+
+if ($Installed_2Pint_Software_DeployR) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Testing DeployR Certificate..." -ForegroundColor Cyan
     #Test Certificate
@@ -2249,32 +2294,6 @@ if ($certHash) {
 }
 
 if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
-    $iPXEWSConnectionInfo = @(
-        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service'; ValueName = 'ConnectionString' }
-        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'ConnectionString' }
-        [PSCustomObject]@{ Path = 'HKLM:\SOFTWARE\2Pint Software\iPXE Anywhere Web Service\GeneralSettings'; ValueName = 'AdvancedConnectionString' }
-    )
-
-    $iPXEWSConnectionStringFound = $false
-    $testediPXEWSConnectionStrings = @()
-    foreach ($regItem in $iPXEWSConnectionInfo) {
-        if (Test-Path -Path $regItem.Path) {
-            $iPXEWSRegData = Get-ItemProperty -Path $regItem.Path -ErrorAction SilentlyContinue
-            if ($iPXEWSRegData -and -not [string]::IsNullOrWhiteSpace($iPXEWSRegData.($regItem.ValueName))) {
-                $candidateConnectionString = $iPXEWSRegData.($regItem.ValueName)
-                if ($testediPXEWSConnectionStrings -notcontains $candidateConnectionString) {
-                    $testediPXEWSConnectionStrings += $candidateConnectionString
-                    $iPXEWSConnectionStringFound = $true
-                    Write-Host "iPXE WS SQL Connection String from Registry ($($regItem.Path)::$($regItem.ValueName)): $candidateConnectionString" -ForegroundColor Cyan
-                    Test-SQLConnection -ConnectionString $candidateConnectionString
-                }
-            }
-        }
-    }
-
-    if (-not $iPXEWSConnectionStringFound) {
-        Write-Host "iPXE WS SQL Connection String is NOT configured in either legacy or current registry locations." -ForegroundColor Red
-    }
     $iPXEcertHash = netsh http show sslcert ipport=0.0.0.0:8051 | Select-String "Certificate Hash" | ForEach-Object { ($_ -split ": ")[1].Trim() }
     if ($iPXEcertHash) {
         Write-Host "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
