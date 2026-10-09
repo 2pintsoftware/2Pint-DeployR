@@ -13,10 +13,11 @@ Once you've done your pre-reqs... come here...
 ## Assumptions
 
 - You downloaded the DeployR Suite files to your Downloads folder in a subfolder called "DeployRSuite"
-- It will contain the 4 zip files from 2Pint Software
+- It will contain the 5 zip files from 2Pint Software
   - 2Pint.2PXE.Installer64.VERSION.zip
+  - 2Pint.2PXE_x64_iPXEfiles_2026-06-29.7z [Update for 2PXE]
   - iPXEAnywhere.Installer64.Version.zip
-  - StifleR-30.VERSION.zip
+  - StifleR-VERSION.zip
     - This contains several more zip files
   - DeployR-VERSION.zip
   
@@ -26,8 +27,9 @@ If you've done, that, run the Extract-2PintZips.ps1 which will expand all of tho
 > Before install,. all of the MSI files that you extracted should be located here: "$env:USERPROFILE\Downloads\DeployRSuite\Extracted"  If you extract them manually, that's fine, just get extract them to that path, then continue with the install scripts.
 
 Order of Install:
-- 2PXE
-- iPXE WS
+- 2PXE [Optional, needed if you want to PXE boot machines]
+- iPXE WS [Optional, requires 2PXE, and used for advanced PXE boot scenarios, requires SQL Express]
+- 2Pint.2PXE_x64_iPXEfiles_2026-06-29.7z (Follow the Directions in the Readme, which provide the PowerShell code)
 - StifleR Server
 - StifleR Dashboard
 - DeployR
@@ -47,6 +49,8 @@ iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/head
 ```
 iex (irm https://raw.githubusercontent.com/2pintsoftware/2Pint-DeployR/refs/heads/main/Installs/2PintSoftware/Install-iPXEWS.ps1)
 ```
+
+Pause and Install the 2Pint.2PXE_x64_iPXEfiles_2026-06-29.7z
 
 - Create-IIS443Binding.ps1 (If using IIS as your Dashboard)
 ```
