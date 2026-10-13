@@ -12,6 +12,7 @@ Change Log
 - 2026.07.14 - Added grabbing the Application and System event logs
 - 2026.07.28 - Added grabbing certificate information and dumping to txt file
 - 2026.10.07 - Added a log of all Windows services, their current state, and startup mode
+- 2026.10.15 - Added a check for specific logs
 #>
 
 
@@ -176,7 +177,21 @@ if (Test-Path -Path $ContentLocation){
             Copy-Item -Path $LogFile.FullName -Destination $TempFolder -Force
         }
     }
-    
+    #Test Log Folder
+    if (!(Test-Path -Path "$ContentLocation\Logs")){
+        Write-Output "Logs folder not found at expected path: $ContentLocation\Logs" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Force
+    }
+
+    foreach ($ExpectedLogName in @('00000003-0000-0000-0000-000000000001.log', 'Sync.log')) {
+        $MatchingLogFiles = @($LogFiles | Where-Object { $_.Name -ieq $ExpectedLogName })
+        if ($MatchingLogFiles.Count -gt 0) {
+            "Expected log found: $ExpectedLogName" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
+            $MatchingLogFiles.FullName | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
+        }
+        else {
+            "Expected log not found under $ContentLocation`: $ExpectedLogName" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Append -Force
+        }
+    }
     
     #Get Detailed List of all downloads in the $ContentLocation\Download Folder
     $DownloadFiles = Get-ChildItem -Path "$ContentLocation\Downloads" | Select-Object *
