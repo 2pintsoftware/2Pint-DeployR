@@ -1,6 +1,10 @@
 <#
+.NOTES
+Change Log
+- 2026.10.13 - Added age-based archiving for ImportOEMDriverPack*.log and ImportCloudOS*.log files into separate archive folders.
+
 .SYNOPSIS
-Creates DeployR maintenance assets for archiving OSD log zip files.
+Creates DeployR maintenance assets for archiving OSD log zip files and OEM driver pack/CloudOS logs.
 
 .DESCRIPTION
 This script does two things:
@@ -75,12 +79,13 @@ if (-not (Test-Path -LiteralPath $maintenanceFolder)) {
 $archiveScriptContent = @'
 <#
 .SYNOPSIS
-Archives older DeployR OSD zip logs from the Logs folder into OSDLogsArchive.
+Archives older DeployR OSD zip logs and ImportOEMDriverPack/ImportCloudOS logs from the Logs folder.
 
 .DESCRIPTION
 This script finds the DeployR Content root, targets its child Logs folder, and moves
 date-prefixed OSD backup zip files older than a configured number of days into
-Logs\OSDLogsArchive.
+Logs\OSDLogsArchive. ImportOEMDriverPack*.log and ImportCloudOS*.log files older
+than the same threshold are moved into their respective archive folders.
 
 The script only processes zip files that match this naming style:
 YYYYMMDD_HHMMSS_<anything>.zip
@@ -299,6 +304,44 @@ if ($filesToArchive) {
 
 Write-Host "Archived $movedCount file(s) to $archivePath" -ForegroundColor Green
 Write-CMTraceLog -Message "Archived $movedCount file(s) to $archivePath" -Type Info -Component 'Archive'
+
+foreach ($logArchive in @(
+    @{ NamePattern = 'ImportOEMDriverPack*.log'; ArchiveFolder = 'ImportOEMDriverPackArchive' },
+    @{ NamePattern = 'ImportCloudOS*.log'; ArchiveFolder = 'ImportCloudOSArchive' }
+)) {
+    $logArchivePath = Join-Path -Path $logsPath -ChildPath $logArchive.ArchiveFolder
+    if (-not (Test-Path -LiteralPath $logArchivePath)) {
+        if ($PSCmdlet.ShouldProcess($logArchivePath, 'Create log archive folder')) {
+            New-Item -Path $logArchivePath -ItemType Directory -Force | Out-Null
+            Write-Host "Created archive folder: $logArchivePath" -ForegroundColor Cyan
+        }
+    }
+
+    $logFilesToArchive = Get-ChildItem -Path $logsPath -File -Filter $logArchive.NamePattern | Where-Object {
+        $_.LastWriteTime -lt $cutoffDate
+    }
+
+    if (-not $logFilesToArchive) {
+        Write-Host "No $($logArchive.NamePattern) files older than $ArchiveAfterDays days found in $logsPath" -ForegroundColor Green
+        Write-CMTraceLog -Message "No $($logArchive.NamePattern) files older than $ArchiveAfterDays days found in $logsPath" -Type Info -Component $logArchive.ArchiveFolder
+        continue
+    }
+
+    $logMovedCount = 0
+    foreach ($logFile in $logFilesToArchive) {
+        $destinationPath = Get-UniqueDestinationPath -ArchiveFolder $logArchivePath -FileName $logFile.Name
+
+        if ($PSCmdlet.ShouldProcess($logFile.FullName, "Move to $destinationPath")) {
+            Move-Item -LiteralPath $logFile.FullName -Destination $destinationPath -ErrorAction Stop
+            $logMovedCount++
+            Write-Host "Archived: $($logFile.Name)" -ForegroundColor DarkGray
+            Write-CMTraceLog -Message "Archived log '$($logFile.FullName)' to '$destinationPath'" -Type Info -Component $logArchive.ArchiveFolder
+        }
+    }
+
+    Write-Host "Archived $logMovedCount $($logArchive.NamePattern) file(s) to $logArchivePath" -ForegroundColor Green
+    Write-CMTraceLog -Message "Archived $logMovedCount $($logArchive.NamePattern) file(s) to $logArchivePath" -Type Info -Component $logArchive.ArchiveFolder
+}
 
 if ($CleanupArchive) {
     $archiveCutoffDate = (Get-Date).AddDays(-$ArchiveCleanupAfterDays)
