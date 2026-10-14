@@ -12,7 +12,8 @@ Change Log
 - 2026.07.14 - Added grabbing the Application and System event logs
 - 2026.07.28 - Added grabbing certificate information and dumping to txt file
 - 2026.10.07 - Added a log of all Windows services, their current state, and startup mode
-- 2026.10.15 - Added a check for specific logs
+- 2026.10.13 - Added a check for specific logs like sync.log for example
+- 2026.10.14 - Added netsh excluded TCP port range and netstat -a -n -b output to Netstat.txt
 #>
 
 
@@ -239,6 +240,21 @@ catch {
     "Failed to collect Windows service information: $($_.Exception.Message)" |
         Out-File -FilePath $ServicesLogPath -Force
     Write-Warning "Failed to collect Windows service information: $_"
+}
+
+#Get Network Connections (-b requires elevation)
+$NetstatLogPath = Join-Path -Path $TempFolder -ChildPath "Netstat.txt"
+try {
+    "Netstat captured: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" | Out-File -FilePath $NetstatLogPath -Force
+    "`r`n=== netsh int ipv4 show excludedportrange protocol=tcp ===" | Out-File -FilePath $NetstatLogPath -Append
+    netsh int ipv4 show excludedportrange protocol=tcp 2>&1 | Out-File -FilePath $NetstatLogPath -Append -Width 4096
+    "`r`n=== netstat -a -n -b ===" | Out-File -FilePath $NetstatLogPath -Append
+    netstat -a -n -b 2>&1 | Out-File -FilePath $NetstatLogPath -Append -Width 4096
+    Write-Host "Captured netstat output to $NetstatLogPath" -ForegroundColor Green
+}
+catch {
+    "Failed to run netstat: $($_.Exception.Message)" | Out-File -FilePath $NetstatLogPath -Append
+    Write-Warning "Failed to run netstat: $_"
 }
 
 #Region Get Cert Information
