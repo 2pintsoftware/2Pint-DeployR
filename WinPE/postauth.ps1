@@ -15,3 +15,9 @@ if (Test-path "$PSScriptRoot\Create-ExtraVariables.ps1") {
     write-host "Loading Create-ExtraVariables.ps1"
     . "$PSScriptRoot\Create-ExtraVariables.ps1"
 }
+
+# Load the Alert-ClientServerVersionMismatch script if it exists
+if (Test-path "$PSScriptRoot\Alert-ClientServerVersionMismatch.ps1") {
+    write-host "Loading Alert-ClientServerVersionMismatch.ps1"
+    . "$PSScriptRoot\Alert-ClientServerVersionMismatch.ps1"
+}
