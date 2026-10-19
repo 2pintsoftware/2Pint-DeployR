@@ -175,6 +175,8 @@ This prompt will auto-continue in 30 seconds.
 
 $clientVersion = Get-DeployRTSVariable -Name 'DEPLOYRCLIENTVERSION'
 $serverVersion = Get-DeployRTSVariable -Name 'DEPLOYRSERVERVERSION'
+#To Force Test Mismatch
+#$clientVersion = 1.1
 
 if ([string]::IsNullOrWhiteSpace($clientVersion)) { $clientVersion = '<not set>' }
 if ([string]::IsNullOrWhiteSpace($serverVersion)) { $serverVersion = '<not set>' }
