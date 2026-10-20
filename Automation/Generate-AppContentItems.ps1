@@ -287,8 +287,8 @@ function Get-NotepadPlusPlusLatestUrl {
         
         $version = $release.tag_name -replace '^v', ''
         
-        $archSuffix = if ($Architecture -eq 'x64') { '.x64' } else { '' }
-        $installer = $release.assets | Where-Object { $_.name -match "npp\.\d+\.\d+(\.\d+)?\.Installer$archSuffix\.exe$" } | Select-Object -First 1
+        $archSuffix = if ($Architecture -eq 'x64') { '\.x64' } else { '' }
+        $installer = $release.assets | Where-Object { $_.name -match "^npp\.\d+(?:\.\d+)+\.Installer$archSuffix\.exe$" } | Select-Object -First 1
         
         if ($installer) {
             Write-Verbose "Notepad++ URL: $($installer.browser_download_url)"
