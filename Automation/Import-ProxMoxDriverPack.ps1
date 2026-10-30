@@ -126,6 +126,10 @@
 
     Requires administrator rights and an installed DeployR client (DeployR.Utility module).
 
+    CHANGE LOG
+    2026-10-30
+    - Follow ISO download redirects, upgrade same-host HTTP redirects to HTTPS, and reject cross-host HTTPS downgrades.
+
     .LINK
     https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/
 #>
@@ -404,7 +408,49 @@ Try
 
                     Try
                       {
-                          $Null = $WebClient.DownloadFile($DownloadURL.OriginalString, $ISOPath.FullName)
+                          $DownloadUriForTransfer = $DownloadURL
+                          $RedirectCount = 0
+
+                          while ($True)
+                            {
+                                Try
+                                  {
+                                      $Null = $WebClient.DownloadFile($DownloadUriForTransfer.AbsoluteUri, $ISOPath.FullName)
+                                      Break
+                                  }
+                                Catch [System.Net.WebException]
+                                  {
+                                      $RedirectResponse = $_.Exception.Response
+                                      $RedirectStatusCode = if ($RedirectResponse) {[int]$RedirectResponse.StatusCode} else {$Null}
+                                      $RedirectLocation = if ($RedirectResponse) {$RedirectResponse.Headers['Location']} else {$Null}
+
+                                      if (($RedirectStatusCode -notin @(301, 302, 303, 307, 308)) -or
+                                          [String]::IsNullOrWhiteSpace($RedirectLocation) -or
+                                          ($RedirectCount -ge 5))
+                                        {
+                                            Throw
+                                        }
+
+                                      $NextDownloadUri = [System.Uri]::new($DownloadUriForTransfer, $RedirectLocation)
+                                      if (($DownloadUriForTransfer.Scheme -eq 'https') -and ($NextDownloadUri.Scheme -eq 'http'))
+                                        {
+                                            if ($NextDownloadUri.DnsSafeHost -ne $DownloadUriForTransfer.DnsSafeHost)
+                                              {
+                                                  Throw "Refusing HTTPS-to-HTTP redirect to a different host: $NextDownloadUri"
+                                              }
+
+                                            $SecureUriBuilder = [System.UriBuilder]$NextDownloadUri
+                                            $SecureUriBuilder.Scheme = 'https'
+                                            $SecureUriBuilder.Port = -1
+                                            $NextDownloadUri = $SecureUriBuilder.Uri
+                                        }
+
+                                      If ($RedirectResponse) {$RedirectResponse.Close()}
+                                      $DownloadUriForTransfer = $NextDownloadUri
+                                      $RedirectCount++
+                                      Write-Verbose -Message "Following download redirect $RedirectCount to `"$($DownloadUriForTransfer.AbsoluteUri)`"." -Verbose
+                                  }
+                            }
                       }
                     Finally
                       {
