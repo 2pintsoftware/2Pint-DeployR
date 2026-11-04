@@ -55,9 +55,14 @@ Change Log
 - 2026.10.07 - Added 2PXE and iPXEWS service checks with startup verification; iPXEWS starts only when 2PXE is running.
 - 2026.10.09 - Added firewall profile status, clarified optional SQL prerequisites, skipped local SQL permission checks when SQL Server is absent, and grouped DeployR/iPXE database connection reporting.
 - 2026.11.04 - Moved InstalledApps.log and DeployR_Registry_Info.log generation to GatherTroubleShootingLogs.ps1.
+- 2026.11.04 - Added a warning when running with a PowerShell version earlier than 7.6.
 
 
 #>
+
+if ($PSVersionTable.PSVersion -lt [version]'7.6') {
+    Write-Warning "This script requires PowerShell 7.6 or later. Current version: $($PSVersionTable.PSVersion)."
+}
 
 #Ensure Several things are installed, as well as configurations are done to help troubleshoot DeployR installations
 
