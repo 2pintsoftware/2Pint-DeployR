@@ -14,6 +14,7 @@ Change Log
 - 2026.10.07 - Added a log of all Windows services, their current state, and startup mode
 - 2026.10.13 - Added a check for specific logs like sync.log for example
 - 2026.10.14 - Added netsh excluded TCP port range and netstat -a -n -b output to Netstat.txt
+- 2026.11.04 - Added installed applications and DeployR registry information logs; excluded mounted content folders from the recursive log scan
 #>
 
 
@@ -21,6 +22,30 @@ $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
 $EventLogsFolder = "$TempFolder\EventLogs"
 if (!(Test-Path -Path $EventLogsFolder)){New-Item -Path $EventLogsFolder -ItemType Directory -Force | Out-Null}
+
+$InstalledAppsFilePath = Join-Path -Path $TempFolder -ChildPath "InstalledApps.log"
+$DeployRRegistryInfoFilePath = Join-Path -Path $TempFolder -ChildPath "DeployR_Registry_Info.log"
+foreach ($LogFilePath in @($InstalledAppsFilePath, $DeployRRegistryInfoFilePath)) {
+    if (Test-Path -Path $LogFilePath) {
+        Remove-Item -Path $LogFilePath -Force
+    }
+}
+
+$InstalledAppsRegistryPaths = if (![Environment]::Is64BitProcess) {
+    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+}
+else {
+    @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+}
+$LogApps = Get-ItemProperty -Path $InstalledAppsRegistryPaths -ErrorAction SilentlyContinue |
+    Where-Object { $_.DisplayName -and $_.UninstallString } |
+    Select-Object DisplayName, Publisher, InstallDate, DisplayVersion, UninstallString, InstallLocation |
+    Sort-Object DisplayName
+$LogApps | ForEach-Object { $_; "----------------------------------------------------" } |
+    Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 
 Function Find-EventLogs {
     <#
@@ -162,13 +187,28 @@ Function Find-EventLogs {
 
 #Get DeployR Log Files
 $DeployRRegPath = "HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings"
-$ContentLocation = (Get-ItemProperty -Path $DeployRRegPath).ContentLocation
+$DeployRRegData = Get-ItemProperty -Path $DeployRRegPath -ErrorAction SilentlyContinue
+if ($DeployRRegData) {
+    $DeployRRegData | Out-File -FilePath $DeployRRegistryInfoFilePath -Force -Encoding UTF8
+}
+$ContentLocation = $DeployRRegData.ContentLocation
 if ($ContentLocation -eq $null -or $ContentLocation -eq ""){
     $ContentLocation = "$Env:Programdata\2Pint Software\DeployR"
 }
 if (Test-Path -Path $ContentLocation){
     Write-Host "DeployR Content Location found at: $ContentLocation" -ForegroundColor Green
-    $LogFiles = Get-ChildItem -Path "$ContentLocation" -Filter "*.log" -Recurse
+    $LogFiles = @()
+    $FoldersToScan = [System.Collections.Generic.Stack[string]]::new()
+    $FoldersToScan.Push($ContentLocation)
+    while ($FoldersToScan.Count -gt 0) {
+        $CurrentFolder = $FoldersToScan.Pop()
+        $LogFiles += Get-ChildItem -Path $CurrentFolder -Filter "*.log" -File
+        $Subfolders = Get-ChildItem -Path $CurrentFolder -Directory |
+            Where-Object { $_.Name -notmatch '^mount(?:_|$)' }
+        foreach ($Subfolder in $Subfolders) {
+            $FoldersToScan.Push($Subfolder.FullName)
+        }
+    }
     if ($LogFiles.Count -eq 0){
         Write-Output "No log files found in $ContentLocation" | Out-File -FilePath "$TempFolder\DeployR_LogFiles.txt" -Force
     }
@@ -404,4 +444,3 @@ Write-Host "Compression complete! Logs saved to: $ZipFilePath" -ForegroundColor 
 Remove-Item -Path $TempFolder -Recurse -Force -ErrorAction Stop
 Write-Host "Temporary troubleshooting folder removed: $TempFolder" -ForegroundColor Gray
 Write-Host "!!! Please send to support@2pintsoftware.com !!!" -ForegroundColor Magenta
-

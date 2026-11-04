@@ -54,6 +54,7 @@ Change Log
 - 2026.10.04 - Updated for ADK to allow another version.
 - 2026.10.07 - Added 2PXE and iPXEWS service checks with startup verification; iPXEWS starts only when 2PXE is running.
 - 2026.10.09 - Added firewall profile status, clarified optional SQL prerequisites, skipped local SQL permission checks when SQL Server is absent, and grouped DeployR/iPXE database connection reporting.
+- 2026.11.04 - Moved InstalledApps.log and DeployR_Registry_Info.log generation to GatherTroubleShootingLogs.ps1.
 
 
 #>
@@ -1155,21 +1156,13 @@ function Get-FreeSpaceAvailable {
 $TempFolder = "$env:USERPROFILE\Downloads\DeployR_TroubleShootingLogs"
 if (!(Test-Path -Path $TempFolder)){New-Item -Path $TempFolder -ItemType Directory -Force | Out-Null}
 $TranscriptFilePath = "$TempFolder\Check-DeployR_TroubleShooting.log"
-$InstalledAppsFilePath = "$TempFolder\InstalledApps.log"
 if (Test-Path -Path $TranscriptFilePath) {
     Remove-Item -Path $TranscriptFilePath -Force
 }
-if (Test-Path -Path $InstalledAppsFilePath) {
-    Remove-Item -Path $InstalledAppsFilePath -Force
-}    
 Start-Transcript -Path $TranscriptFilePath -Force
 
 # Executing Script
 Write-Host "=========================================================================" -ForegroundColor DarkGray
-
-#Generate Log of Installed Apps
-$LogApps = Get-InstalledApps
-$LogApps | ForEach-Object { $_; "----------------------------------------------------" }| Out-File -FilePath $InstalledAppsFilePath -Force -Encoding UTF8
 
 #Get Latest Versions of 2Pint Software
 try {
@@ -1938,8 +1931,6 @@ if ($Installed_2Pint_Software_DeployR){
     $DeployRRegData = Get-ItemProperty -Path $RegPath -ErrorAction SilentlyContinue
     write-host "DeployR Information from Registry:" -ForegroundColor Cyan
     if ($DeployRRegData){
-        #Export to file for logging
-        $DeployRRegData | Out-File -FilePath "$TempFolder\DeployR_Registry_Info.log" -Force -Encoding UTF8
         $DeployRCon
     }
     #Test ServiceURL against Dashboard
