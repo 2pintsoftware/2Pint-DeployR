@@ -95,10 +95,15 @@ function Show-InputPopup {
 
 $CurrentComputerName = $env:COMPUTERNAME
 $TSVarComputerName = ${TSEnv:ComputerName}
-if ($TSVarComputerName) {
-    $CurrentComputerName = $TSVarComputerName
+if (Get-Module -name "DeployR.Utility"){
+    if ($TSVarComputerName) {
+        write-Host "Using TS environment variable for computer name: $TSVarComputerName"
+        $CurrentComputerName = $TSVarComputerName
+    }
 }
-        
+
+Write-Host "Settting Default Prompt to: $CurrentComputerName"
+write-Host "Prompting for computer name from end user"
 $Prompt = "Input computer name:"
 $ComputerName = Show-InputPopup -Message $prompt -Title "Computer Name" -DefaultValue $CurrentComputerName
 
@@ -113,4 +118,8 @@ if ($ComputerName) {
         ${TSEnv:ComputerName} = $ComputerName
         Write-Host "Setting computer name to: $tsenv:ComputerName"
     }
+    else {
+        Write-Host "DeployR.Utility module not found. Unable to set TS environment variable for computer name." -ForegroundColor Red
+    }
+
 }
