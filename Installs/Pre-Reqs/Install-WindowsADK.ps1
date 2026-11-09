@@ -6,14 +6,15 @@
     It logs the process and handles common errors, suitable for large-scale Windows deployment scenarios.
 .NOTES
     Author: Mike Terrill/2Pint Software
-    Date: September 25, 2026
-    Version: 26.09.25
+    Date: November 9, 2026
+    Version: 26.11.09
     Requires: Administrative privileges, 64-bit Windows (10/11, Server 2016+), internet access
     Source: https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install
 
     Version history:
     25.07.19: Initial release
     26.09.25: No changes, just updated references to Windows ADK 10.1.26100.xxxx
+    26.11.09: Updated to also install USMT for DeployR 1.4
 
 #>
 
@@ -120,10 +121,10 @@ if (-not (Test-Path $InstallerPath)) {
     exit 1
 }
 
-# Install ADK with only Deployment Tools
+# Install ADK with only Deployment Tools and USMT
 Write-Log -Message "Installing Windows ADK with Deployment Tools..." -LogFile $LogFile
 try {
-    $Arguments = "/quiet /norestart /installpath `"$InstallDir`" /features OptionId.DeploymentTools"
+    $Arguments = "/quiet /norestart /installpath `"$InstallDir`" /features OptionId.DeploymentTools OptionId.UserStateMigrationTool"
     $Process = Start-Process -FilePath $InstallerPath -ArgumentList $Arguments -Wait -PassThru -ErrorAction Stop
     Write-Log -Message "Installation exit code: $($Process.ExitCode)" -LogFile $LogFile
     
