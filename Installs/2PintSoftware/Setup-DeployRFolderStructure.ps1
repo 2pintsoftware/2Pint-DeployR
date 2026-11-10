@@ -128,3 +128,13 @@ $DeployRSourcesPath = $DeployRSourcePath
     else {
         Write-Host "2PXE certificate not found at $sourceCertPath - skipping copy" -ForegroundColor Yellow
     }
+
+    # Create a Readme.txt file so that this directory can be used in the lab kit to create a WinPE x64 Driver Pack content item
+    $destReadmePath = Join-Path -Path $DeployRSourcesPath -ChildPath "DriverPacks\X64\WinPE\Readme.txt"
+    if (-not (Test-Path -Path $destReadmePath)) {
+        "Populate this folder with WinPE drivers." | Set-Content -Path $destReadmePath
+        Write-Host "Created Readme.txt at $destReadmePath" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Readme.txt already exists at $destReadmePath" -ForegroundColor DarkGray
+    }
