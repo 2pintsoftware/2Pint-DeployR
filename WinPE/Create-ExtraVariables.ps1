@@ -1,3 +1,23 @@
+<#
+.SYNOPSIS
+Creates additional DeployR task sequence inventory variables.
+
+.DESCRIPTION
+Requires the DeployR TSENV drive and CIM support. Writes PA_* task sequence
+variables and a transcript in the deployment log folder or TEMP. On Microsoft
+Virtual Machines, reads the Hyper-V guest registry parameters to populate
+PA_HyperVVMName and PA_HyperVHostName. Unavailable inventory values are recorded as NA.
+
+.EXAMPLE
+.\Create-ExtraVariables.ps1
+
+.NOTES
+Author: Not specified
+Created: Not specified
+Change History:
+2026-11-09 - Added PA_HyperVVMName for Microsoft Virtual Machines only.
+2026-11-09 - Added PA_HyperVHostName from the Hyper-V guest registry parameters.
+#>
 
 $LogFolder = Join-Path $env:SystemDrive "_2P\Logs"
 if (-not (Test-Path -Path $LogFolder)){
@@ -27,6 +47,27 @@ try {
         PA_TPMVERSION = 'NA'
         PA_SECUREBOOTSTATUS = 'NA'
         PA_STIFLERVERSION = 'NA'
+    }
+
+    # Hyper-V guest parameters may be unavailable in WinPE even on a Microsoft VM.  requires DeployR 1.4+
+    try {
+        $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        if ($ComputerSystem.Manufacturer -eq 'Microsoft Corporation' -and $ComputerSystem.Model -eq 'Virtual Machine') {
+            $Variables.PA_HyperVVMName = 'NA'
+            $Variables.PA_HyperVHostName = 'NA'
+            $HyperVParameters = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Virtual Machine\Guest\Parameters' -ErrorAction Stop
+            if ([string]::IsNullOrWhiteSpace([string]$HyperVParameters.HostName)) {
+                Write-Warning 'Hyper-V guest registry value HostName is missing or empty.'
+            } else {
+                $Variables.PA_HyperVHostName = $HyperVParameters.HostName
+            }
+            if ([string]::IsNullOrWhiteSpace([string]$HyperVParameters.VirtualMachineName)) {
+                throw 'Hyper-V guest registry value VirtualMachineName is missing or empty.'
+            }
+            $Variables.PA_HyperVVMName = $HyperVParameters.VirtualMachineName
+        }
+    } catch {
+        Write-Warning "Hyper-V inventory unavailable: $_"
     }
 
     try {
