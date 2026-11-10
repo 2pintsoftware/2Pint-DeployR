@@ -2,7 +2,21 @@
 
 [Change-ADComputerObjectOwner.ps1](Change-ADComputerObjectOwner.ps1) changes the owner of an existing Active Directory computer object to a specified computer account, typically the DeployR server's account. Run it as a DeployR server-side script before the Offline Domain Join (ODJ) step.
 
+## The Issue
+
+When reimaging a computer, its existing Active Directory computer account may have been created by a different deployment server or provisioning identity. Windows domain-join hardening adds ownership checks before allowing an existing account to be reused. As a result, account provisioning or domain join can fail even when the DeployR execution identity has the usual delegated AD permissions. A typical error is `0xAAC (2732): NERR_AccountReuseBlockedByPolicy`.
+
+This script attempts to address that ownership mismatch by assigning the existing computer object to the specified owner before DeployR performs ODJ. It does not bypass the remaining AD permissions or domain-join checks, and it does not change accounts that do not already exist.
+
 **This workaround is not supported by 2Pint Software.** It changes AD security ownership. Test in a lab and obtain approval for the required AD permissions before using it in production. Changing ownership does not guarantee that all DeployR or Windows domain-join reuse requirements will be satisfied.
+
+## Other Potential Solutions
+
+Microsoft also added a policy, **Domain controller: Allow computer account re-use during domain join**, that controls which existing computer accounts may be reused by specifying trusted computer-account owners or groups containing those owners. This is an allow list of trusted owners, not simply a list of accounts allowed to perform domain joins; the joining identity still needs the required AD permissions.
+
+Configure the policy through Group Policy on the domain controllers under **Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > Security Options**. The resulting registry setting is `HKLM\SYSTEM\CurrentControlSet\Control\SAM\ComputerAccountReuseAllowList`. Microsoft instructs administrators to configure it through policy, not edit the registry manually. Follow the update prerequisites and narrowly scope the trusted owners as described in [KB5020276: Netjoin domain join hardening changes](https://support.microsoft.com/en-us/servicing/os/windows/2022/10/kb5020276-netjoin-domain-join-hardening-changes).
+
+Review this policy-based option before using the script. Microsoft advises against changing computer-account ownership as a general workaround unless the previous owner account has been deleted, because permissions granted to the original owner may remain. The legacy `NetJoinLegacyAccountReuse` registry workaround is no longer supported following the August 13, 2024 updates.
 
 ## What It Does
 
