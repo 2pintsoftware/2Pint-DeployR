@@ -2,7 +2,6 @@
 DON't RUN IN ISE or PS 5!  USE a REAL PowerShell7 Terminal or VSCode & PS7
 
 CURRENT ISSUES:
-GreenShot hangs and waits for user input
 VLC is saying it's a 16bit app, so check the download
 
 .SYNOPSIS
@@ -15,7 +14,7 @@ This script provides functions to automatically find and return the latest downl
 - Notepad++
 - VLC Media Player
 - 7-Zip
-- GreenShot
+- Jiffshot
 - Paint.Net
 
 .NOTES
@@ -27,6 +26,7 @@ Updates
 26.2.17 - Added Tags for Apps (to easier pair with another thing I'm working on)
 26.2.17 - Added Ability to set App Description seperate from Version Description (Version description is automatically set to the applcation version number)
 26.2.19 - Removed Greenshot from the list (most of the code is still her, just preventing it from making an app), as it wasn't 100% silent install, causes issues in a TS
+26.11.12 - Replaced Greenshot with Devolutions Jiffshot (silent MSI install)
 #>
 
 # Configure root download path
@@ -398,37 +398,40 @@ function Get-7ZipLatestUrl {
     }
 }
 
-# Function to get latest Greenshot download URL
-function Get-GreenshotLatestUrl {
+# Function to get latest Jiffshot download URL
+function Get-JiffshotLatestUrl {
     [CmdletBinding()]
-    param()
+    param(
+    [ValidateSet('x64', 'arm64')]
+    [string]$Architecture = 'x64'
+    )
     
     try {
-        $apiUrl = "https://api.github.com/repos/greenshot/greenshot/releases/latest"
+        $apiUrl = "https://api.github.com/repos/Devolutions/jiffshot/releases/latest"
         $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -ErrorAction Stop
         
         $version = $release.tag_name -replace '^v', ''
         
-        $installer = $release.assets | Where-Object { $_.name -match 'Greenshot-INSTALLER.*\.exe$' } | Select-Object -First 1
+        $installer = $release.assets | Where-Object { $_.name -like "Devolutions.Jiffshot-windows-$Architecture-*.msi" } | Select-Object -First 1
         
         if ($installer) {
-            Write-Verbose "Greenshot URL: $($installer.browser_download_url)"
-            Write-Verbose "Greenshot Version: $version"
+            Write-Verbose "Jiffshot URL: $($installer.browser_download_url)"
+            Write-Verbose "Jiffshot Version: $version"
             
             return [PSCustomObject]@{
-                AppName = "Greenshot"
+                AppName = "Jiffshot"
                 Version = $version
                 URL = $installer.browser_download_url
-                SilentInstallCommand = "FILENAME /VERYSILENT"
+                SilentInstallCommand = "msiexec.exe /i FILENAME /qn /norestart"
             }
         }
         else {
-            Write-Error "Could not find Greenshot installer in latest release"
+            Write-Error "Could not find Jiffshot $Architecture MSI in latest release"
             return $null
         }
     }
     catch {
-        Write-Error "Failed to get Greenshot info: $_"
+        Write-Error "Failed to get Jiffshot info: $_"
         return $null
     }
 }
@@ -631,7 +634,7 @@ function Get-AllLatestUrls {
         NotepadPlusPlus = Get-NotepadPlusPlusLatestUrl -Architecture $Architecture
         VLC = Get-VLCLatestUrl -Architecture $Architecture
         SevenZip = Get-7ZipLatestUrl -Architecture $Architecture
-        Greenshot = Get-GreenshotLatestUrl
+        Jiffshot = Get-JiffshotLatestUrl
         PaintDotNet = Get-PaintDotNetLatestUrl
         OBSStudio = Get-OBSStudioLatestUrl -Architecture $Architecture
         VSCode = Get-VSCodeLatestUrl -Architecture $Architecture
@@ -988,13 +991,13 @@ $Thunderbird = Get-ThunderbirdLatestUrl -Architecture $Architecture
 $NotepadPlusPlus = Get-NotepadPlusPlusLatestUrl -Architecture $Architecture
 $VLC = Get-VLCLatestUrl -Architecture $Architecture
 $SevenZip = Get-7ZipLatestUrl -Architecture $Architecture
-#$Greenshot = Get-GreenshotLatestUrl
+$Jiffshot = Get-JiffshotLatestUrl -Architecture $Architecture
 $PaintDotNet = Get-PaintDotNetLatestUrl -Architecture $Architecture
 $OBSStudio = Get-OBSStudioLatestUrl -Architecture $Architecture
 $VSCode = Get-VSCodeLatestUrl -Architecture $Architecture
 
 # Display retrieved application info
-$apps = @($Firefox, $Thunderbird, $NotepadPlusPlus, $VLC, $SevenZip, $PaintDotNet, $OBSStudio, $VSCode)
+$apps = @($Firefox, $Thunderbird, $NotepadPlusPlus, $VLC, $SevenZip, $Jiffshot, $PaintDotNet, $OBSStudio, $VSCode)
 
 # Keep only valid app objects to avoid downstream binding failures.
 $validApps = @()
@@ -1137,7 +1140,7 @@ $results += Save-AppInstaller -RootPath $RootPath -InputObject $Thunderbird -Ver
 $results += Save-AppInstaller -RootPath $RootPath -InputObject $NotepadPlusPlus -Verbose
 $results += Save-AppInstaller -RootPath $RootPath -InputObject $VLC -Verbose
 $results += Save-AppInstaller -RootPath $RootPath -InputObject $SevenZip -Verbose
-$results += Save-AppInstaller -RootPath $RootPath -InputObject $Greenshot -Verbose
+$results += Save-AppInstaller -RootPath $RootPath -InputObject $Jiffshot -Verbose
 $results += Save-AppInstaller -RootPath $RootPath -InputObject $PaintDotNet -Verbose
 #>
 
