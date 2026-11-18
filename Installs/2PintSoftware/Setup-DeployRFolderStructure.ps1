@@ -36,7 +36,7 @@ $DeployRSourcesPath = $DeployRSourcePath
     
     # Applications folders
     "Applications\2PintSoftware\StifleRClient",
-    "Applications\7zip",
+    "Applications\7-zip",
     "Applications\NotepadPP",
     "Applications\VSCode",
     

@@ -205,12 +205,12 @@ function Get-DellWinPE11DriverPack {
         Write-Host "  Release Date: $releaseDate" -ForegroundColor Gray
         Write-Host "  Support Page: $supportPageUrl" -ForegroundColor Gray
         
-        # Fetch the CAB download URL from the Dell support page
-        Write-Host "`nFetching CAB download URL from Dell support page..." -ForegroundColor Cyan
-        $cabUrl = Get-DellCABDownloadUrl -Url $supportPageUrl
+        # Fetch the CAB download URL from Dell's official Driver Pack Catalog
+        Write-Host "`nFetching CAB download URL from Dell Driver Pack Catalog..." -ForegroundColor Cyan
+        $cabUrl = Get-DellCABDownloadUrl -DriverId $driverID
         
         if (-not $cabUrl) {
-            throw "Could not extract CAB download URL from Dell support page"
+            throw "Could not find the CAB download URL in Dell's Driver Pack Catalog for driver ID $driverID."
         }
         
         # Extract filename from URL
@@ -265,7 +265,7 @@ function Get-DellWinPE11DriverPack {
             if (-not $downloadSuccess) {
                 try {
                     Write-Host "  Attempting download using BITS..." -ForegroundColor Gray
-                    Start-BitsTransfer -Source $cabUrl -Destination $DownloadPath -DisplayName "Dell WinPE 11 Driver Pack" -Description "Downloading $cabFileName" -ErrorAction Stop -RetryInterval 60  -CustomHeaders "User-Agent:Bob"
+                    Start-BitsTransfer -Source $cabUrl -Destination $DownloadPath -DisplayName "Dell WinPE 11 Driver Pack" -Description "Downloading $cabFileName" -ErrorAction Stop -RetryInterval 60 -RetryTimeout 300 -CustomHeaders "User-Agent:Bob"
                     
                     if (Test-Path $DownloadPath) {
                         $downloadSuccess = $true
@@ -344,60 +344,68 @@ function Get-DellWinPE11DriverPack {
         return $result
     }
     catch {
-        Write-Error "Failed to process Dell WinPE 11 Driver Pack: $_"
-        return $null
+        throw "Failed to process Dell WinPE 11 Driver Pack: $($_.Exception.Message)"
     }
 }
 
 function Get-DellCABDownloadUrl {
     <#
     .SYNOPSIS
-        Extract the CAB download URL from a Dell driver support page.
+        Find the Dell WinPE 11 CAB URL in Dell's official Driver Pack Catalog.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Url
+        [string]$DriverId
     )
-    
+
+    $temporaryDirectory = Join-Path $env:TEMP ("DellDriverPackCatalog-$([guid]::NewGuid().ToString('N'))")
+    $catalogPath = Join-Path $temporaryDirectory 'DriverPackCatalog.cab'
+    $extractDirectory = Join-Path $temporaryDirectory 'Extracted'
+
     try {
-        Write-Verbose "Fetching Dell support page: $Url"
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-        
-        $downloadUrl = $null
-        
-        # Pattern 1: Look for .cab files in downloads.dell.com
-        if ($response.Content -match '(https://downloads\.dell\.com/[^"<>\s]+\.cab)') {
-            $downloadUrl = $matches[1]
+        New-Item -Path $extractDirectory -ItemType Directory -Force | Out-Null
+        Write-Host "Fetching Dell Driver Pack Catalog for driver ID $DriverId..." -ForegroundColor Cyan
+        Start-BitsTransfer -Source 'https://downloads.dell.com/catalog/DriverPackCatalog.cab' -Destination $catalogPath -RetryInterval 60 -RetryTimeout 300 -CustomHeaders 'User-Agent:Bob' -ErrorAction Stop
+
+        & expand.exe -R $catalogPath '-F:DriverPackCatalog.xml' $extractDirectory | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "expand.exe failed to extract DriverPackCatalog.xml (exit code $LASTEXITCODE)."
         }
-        
-        # Pattern 2: Look for .cab files in dl.dell.com
-        if (-not $downloadUrl -and $response.Content -match '(https://dl\.dell\.com/[^"<>\s]+\.cab)') {
-            $downloadUrl = $matches[1]
+
+        $catalogXmlPath = Join-Path $extractDirectory 'DriverPackCatalog.xml'
+        if (-not (Test-Path -LiteralPath $catalogXmlPath)) {
+            throw 'DriverPackCatalog.xml was not found after extracting Dell DriverPackCatalog.cab.'
         }
-        
-        # Pattern 3: Look for any .cab href
-        if (-not $downloadUrl -and $response.Content -match 'href="(https://[^"]+\.cab)"') {
-            $downloadUrl = $matches[1]
+
+        [xml]$catalog = Get-Content -LiteralPath $catalogXmlPath -Raw -ErrorAction Stop
+        $driverPackage = $catalog.SelectNodes("//*[local-name()='DriverPackage' and @type='winpe']") |
+            Where-Object {
+                $_.GetAttribute('releaseID') -eq $DriverId -and
+            $_.SelectSingleNode(".//*[local-name()='OperatingSystem' and @osCode='winpe11x' and @osArch='x64']")
+            } |
+            Select-Object -First 1
+
+        if (-not $driverPackage) {
+            throw "No x64 WinPE 11 CAB was found in Dell's catalog for driver ID $DriverId."
         }
-        
-        # Pattern 4: Look for data-download-url with .cab
-        if (-not $downloadUrl -and $response.Content -match 'data-download-url="([^"]+\.cab)"') {
-            $downloadUrl = $matches[1]
+
+        $cabRelativePath = $driverPackage.GetAttribute('path')
+        if (-not $cabRelativePath -or [System.IO.Path]::GetExtension($cabRelativePath) -ne '.cab') {
+            throw "Dell's catalog entry for driver ID $DriverId did not contain a CAB path."
         }
-        
-        if ($downloadUrl) {
-            # Clean up URL (remove HTML entities)
-            $downloadUrl = $downloadUrl -replace '&amp;', '&'
-            Write-Verbose "Found CAB URL: $downloadUrl"
-            return $downloadUrl
-        }
-        
-        return $null
+
+        $downloadUrl = "https://dl.dell.com/$($cabRelativePath.TrimStart('/'))"
+        Write-Host "  Found CAB URL: $downloadUrl" -ForegroundColor Green
+        return $downloadUrl
     }
     catch {
-        Write-Verbose "Failed to parse Dell support page: $_"
-        return $null
+        throw "Could not find the Dell WinPE 11 CAB URL for driver ID $DriverId. $($_.Exception.Message)"
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryDirectory) {
+            Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 function Import-DellWinPEDriverPackBasic {
@@ -419,7 +427,7 @@ function Import-DellWinPEDriverPackBasic {
 
     Write-Host "Downloading Dell CAB to $cabPath"
     if (-not (Test-Path -Path $cabPath)) {
-        Start-BitsTransfer -Source $CabUrl -Destination $cabPath -RetryInterval 60 -RetryTimeout 3600 -CustomHeaders "User-Agent:Bob" -ErrorAction Stop
+        Start-BitsTransfer -Source $CabUrl -Destination $cabPath -RetryInterval 60 -RetryTimeout 300 -CustomHeaders "User-Agent:Bob" -ErrorAction Stop
     }
     else {
         Write-Host "  CAB already exists, skipping download."
@@ -464,6 +472,10 @@ function Import-DellWinPEDriverPackBasic {
 $DellWinPE = Get-DellWinPE11DriverPack
 $FullSourcePath = "$RootPath\DriverPacks\X64\WinPE\Dell"
 
+if (-not $DellWinPE -or -not $DellWinPE.CABDownloadUrl) {
+    throw 'Could not find the Dell WinPE 11 Driver Pack CAB URL. The driver pack cannot be imported.'
+}
+
 if (Test-Path -path $FullSourcePath){
     Write-Host "Dell Driver Pack already exists at $FullSourcePath"
 } else {
@@ -471,9 +483,10 @@ if (Test-Path -path $FullSourcePath){
     Write-Host "Created directory for Dell Driver Pack at $FullSourcePath"
 }
 
-if ($DellWinPE) {
+try {
     Import-DellWinPEDriverPackBasic -FullSourcePath $FullSourcePath -CabUrl $DellWinPE.CABDownloadUrl
-} else {
-    Write-Warning "Could not find Dell WinPE Driver Pack URL."
+}
+catch {
+    throw "Dell WinPE 11 Driver Pack download or import failed. The script stopped: $($_.Exception.Message)"
 }
 
