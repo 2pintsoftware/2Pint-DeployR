@@ -53,7 +53,8 @@ Software is available from [releases.2pintsoftware.com](https://releases.2pintso
 - [ ] .NET 10.x runtimes installed
 - [ ] Windows BranchCache feature enabled
 - [ ] Windows ADK and WinPE add-on installed
-- [ ] If installing iPXE WebService: SQL Express and its cumulative update installed, server rebooted, SQL configured, and Management Studio installed
+- [ ] If installing iPXE WebService: SQL Express and its cumulative update installed, server rebooted, and SQL configured
+- [ ] Optional: SQL Server Management Studio (SSMS) installed on this server or an admin workstation if needed for database administration
 - [ ] Server is named `DR`, remains in a workgroup, and has the documented disk layout
 - [ ] `DR.2P.GARYTOWN.COM` (YOUR FQDN) resolves to the server
 - [ ] 2PXE Server 4.0.x installed and verified
@@ -90,9 +91,9 @@ SQL Express is only needed if you are installing the iPXE WebService add-on. Ski
 2. Install the [SQL Server 2025 cumulative update](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-SQL2025CU.ps1).
 3. Reboot the server after the cumulative update completes.
 4. Run the [SQL Express configuration script](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Configure-SQLExpress.ps1).
-5. Install [SQL Server Management Studio 22](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-SMSS22.ps1).
+5. Optional: install [SQL Server Management Studio 22](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/Pre-Reqs/Install-SMSS22.ps1) on this server or on a separate admin workstation if you need a graphical tool to inspect or manage the SQL Express database. SSMS is not required on the DeployR server.
 
-> Screenshot to show Pre-reqs complete, skipped SSMS for this server as it's only needed to look at SQL databases, can be used from other endpoints.
+> In this lab, SSMS is not installed on the server; use it from another workstation when SQL database inspection is needed.
 ![Prerequisites installed](media/Pre-ReqsInstalled.png)
 
 ## 2. Install 2PXE Server 4.0.x
@@ -256,19 +257,19 @@ The next step is to Generate a simple Boot image to text PXE, from the Dashboard
 
 The process can be monitored via the log, the name of the log will match the GUID of the content item for the boot media:
 
-[![DeployR Content Path](media/BootMediaGenLog.png)](media/BootMediaGenLog6..png)
+[![DeployR Content Path](media/BootMediaGenLog.png)](media/BootMediaGenLog.png)
 
 ## Optional Clean Setup Scripts
 
 For a clean setup, I like to run these scripts:
 
 - [Set up the DeployR folder structure](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Installs/2PintSoftware/Setup-DeployRFolderStructure.ps1) to create folders for source files.  Helps to stay organized on where the content is kept for if the content items need to be modified or updated.
-[![DeployR Source Repo](media/SourceRepo.png)](media/SourceRepo..png)
+[![DeployR Source Repo](media/SourceRepo.png)](media/SourceRepo.png)
 - [Generate application content items](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Automation/Generate-AppContentItems.ps1) to pre-populate application content.
 
 ## 2PXE Testing
 
-Now that everything is installed, does it work.
+On a test client connected to the lab PXE network, choose network boot. Confirm the client receives an IP address, 2PXE responds to the PXE request, and the expected boot menu or boot image loads. The screenshots below show the process. A successful test reaches the intended boot environment.
 
 PXE boot test screenshots. Select an image to open it at full size.
 
@@ -305,6 +306,7 @@ The server is setup, time to create task sequences, customize iPXE, do the fun t
 
 ## Troubleshooting Pointers
 
+- [DeployR-Troubleshooting.ps1](https://github.com/2pintsoftware/2Pint-DeployR/blob/main/Troubleshooting/DeployR-Troubleshooting.ps1) helps identify potential misconfigurations or missing prerequisites.
 - If a setup page or service is unreachable, first confirm that the DNS name resolves to the expected server and that you are using the address and port configured during installation.
 - If a browser or client reports a certificate warning, follow the 2PXE and product documentation for the generated certificate's trust and binding requirements. Do not replace it with a different certificate unless your environment requires that configuration.
 - If an installer or verification step fails, capture the exact error and consult the troubleshooting section for that product in its official setup guide before continuing.

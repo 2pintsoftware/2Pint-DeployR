@@ -1074,12 +1074,16 @@ Foreach ($app in $validApps) {
                     }
                 }
                 catch {
-                    Write-Error "Failed to update DeployR app: $_"
+                    $errorMessage = $_.Exception.Message
+                    if ($errorMessage -match "(?i)DeployRTemp:\\|Cannot bind argument to parameter 'Path' because it is null") {
+                        $errorMessage += ' Reboot the DeployR server and rerun this script.'
+                    }
+                    Write-Error "Failed to update DeployR app: $errorMessage"
                     $deployRStats.Failed += [PSCustomObject]@{
                         AppName = $app.AppName
                         Version = $app.Version
                         Action = "Failed to update in DeployR"
-                        Error = $_.Exception.Message
+                        Error = $errorMessage
                     }
                 }
             }
@@ -1112,12 +1116,16 @@ Foreach ($app in $validApps) {
                 }
             }
             catch {
-                Write-Error "Failed to create DeployR app: $_"
+                $errorMessage = $_.Exception.Message
+                if ($errorMessage -match "(?i)DeployRTemp:\\|Cannot bind argument to parameter 'Path' because it is null") {
+                    $errorMessage += ' Reboot the DeployR server and rerun this script.'
+                }
+                Write-Error "Failed to create DeployR app: $errorMessage"
                 $deployRStats.Failed += [PSCustomObject]@{
                     AppName = $app.AppName
                     Version = $app.Version
                     Action = "Failed to create in DeployR"
-                    Error = $_.Exception.Message
+                    Error = $errorMessage
                 }
             }
         }
