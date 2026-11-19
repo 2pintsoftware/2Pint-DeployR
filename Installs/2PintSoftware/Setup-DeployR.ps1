@@ -214,10 +214,9 @@ function Set-DeployRServerConfiguration  {
     Set-ItemProperty -Path $regPath -Name "ClientURL" -Value "$ClientURL" -Type String
     Set-ItemProperty -Path $regPath -Name "JoinInfrastructure" -Value "$JoinInfrastructure" -Type String
     Set-ItemProperty -Path $regPath -Name "StifleRServerApiUrl" -Value "$StifleRServerApiUrl" -Type String
-    Set-ItemProperty -Path $regPath -Name "BypassAuthentication" -Value "True" -Type String
     Set-ItemProperty -Path $regPath -Name "BypassLocalAuthentication" -Value "True" -Type String
     Set-ItemProperty -Path $regPath -Name "ClientPasscode" -Value "P@ssw0rd" -Type String
-    Set-ItemProperty -Path $regPath -Name "SqlConnectionBy" -Value "ServerInstanceAndDB" -Type String
+    Set-ItemProperty -Path $regPath -Name "SqlConnectionBy" -Value "SQLite" -Type String
     
     
     #Test for D Volume and ensure it's a local disk, NTFS formatted, and create DeployRContentLib folder
@@ -246,13 +245,13 @@ function Set-DeployRServerConfiguration  {
     # Determine target location
     if ($useDDrive) {
         $targetbackuppath = 'D:\DeployRBackups'
-        $targetContentLib = 'D:\DeployRContentLib'
+        $targetContentLib = 'D:\2Pint Software\DeployR'
         #$targetSources = 'D:\DeployRSources'
         $driveLetter = 'D:'
     }
     else {
         $targetbackuppath = 'C:\DeployRBackups'
-        $targetContentLib = 'C:\DeployRContentLib'
+        $targetContentLib = 'C:\2Pint Software\DeployR'
         #$targetSources = 'C:\DeployRSources'
         $driveLetter = 'C:'
     }
@@ -420,15 +419,56 @@ Set-DeployRServerConfiguration -fqdn $fqdn
 $WMIServiceInstalled = Get-Service -Name StifleRWmiAgent -ErrorAction SilentlyContinue
 if ($WMIServiceInstalled) {
     Write-Host "StifleR WMI Agent service is installed. Attempting to approve DeployR via WMI..." -ForegroundColor Green
-    # Narrow to DeployR
-    $InfraServices = Get-CimInstance -ClassName "InfrastructureServices" -Namespace root\stifler -ErrorAction Stop
-    $DeployR = $InfraServices | Where-Object { $_.Type -eq 'DeployR' }
+    $CimNamespace = 'root\stifler'
 
-    if (-not $DeployR) { Write-Error "No DeployR instance found in root\stifler\InfrastructureServices"; return }
+    # Initialize the StifleR CIM provider before requesting infrastructure service instances.
+    try {
+        Get-CimInstance -ClassName 'StifleREngine' -Namespace $CimNamespace -ErrorAction Stop | Out-Null
+    }
+    catch {
+        Write-Error "Unable to initialize the StifleR CIM provider by querying StifleREngine: $($_.Exception.Message)"
+        exit 1
+    }
+
+    # Allow DeployR time to register its infrastructure service after installation and startup.
+    $DeployR = $null
+    $lastCimError = $null
+    $waitUntil = [DateTime]::UtcNow.AddSeconds(60)
+    do {
+        try {
+            $InfraServices = Get-CimInstance -ClassName 'InfrastructureServices' -Namespace $CimNamespace -ErrorAction Stop
+            $DeployR = $InfraServices | Where-Object { $_.Type -eq 'DeployR' } | Select-Object -First 1
+            $lastCimError = $null
+        }
+        catch {
+            $lastCimError = $_
+        }
+
+        if (-not $DeployR -and [DateTime]::UtcNow -lt $waitUntil) {
+            Start-Sleep -Seconds 2
+        }
+    } while (-not $DeployR -and [DateTime]::UtcNow -lt $waitUntil)
+
+    if (-not $DeployR) {
+        if ($lastCimError) {
+            Write-Error "Unable to query root\stifler\InfrastructureServices: $($lastCimError.Exception.Message)"
+        }
+        else {
+            Write-Error "No DeployR instance appeared in root\stifler\InfrastructureServices within 60 seconds."
+        }
+        exit 1
+    }
+
     $DeployR | Format-List *
 
     # Call the Approve method on the instance
-    $result = Invoke-CimMethod -InputObject $DeployR -MethodName 'Approve'
+    try {
+        $result = Invoke-CimMethod -InputObject $DeployR -MethodName 'Approve' -ErrorAction Stop
+    }
+    catch {
+        Write-Error "Failed to approve the DeployR infrastructure service: $($_.Exception.Message)"
+        exit 1
+    }
 
     # Inspect returned object (some CIM implementations return ReturnValue or other info)
     $result | Format-List *

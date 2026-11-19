@@ -3,6 +3,7 @@
 USE POWERSHELL 7.  This doesn't work properly from PowerShell 5 Terminal.
 
 - Check if all required applications are installed
+- Warn if the StifleR Client is installed and must be uninstalled from the server
 - Validate server configuration settings
 - Ensure firewall rules are correctly set
 - Checks Connectivity for DeployR / StifleR URLs & Ports based on Registry Entries
@@ -56,6 +57,7 @@ Change Log
 - 2026.10.09 - Added firewall profile status, clarified optional SQL prerequisites, skipped local SQL permission checks when SQL Server is absent, and grouped DeployR/iPXE database connection reporting.
 - 2026.11.04 - Moved InstalledApps.log and DeployR_Registry_Info.log generation to GatherTroubleShootingLogs.ps1.
 - 2026.11.04 - Added a warning when running with a PowerShell version earlier than 7.6.
+- 2026.11.19 - Added a prominent warning to uninstall the StifleR Client when detected on the server.
 
 
 #>
@@ -1183,6 +1185,21 @@ catch {
 $installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -notmatch " - Shared framework"}
 $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "SDK"}
 $installedApps = $installedApps | Where-Object {$_.DisplayName -notmatch "AppHost"}
+
+$StifleRClients = @($installedApps | Where-Object { $_.DisplayName -match '^2Pint Software StifleR Client(?:\s|$)' })
+if ($StifleRClients.Count -gt 0) {
+    Write-Host ""
+    Write-Host "=========================================================================" -ForegroundColor White -BackgroundColor Red
+    Write-Host "!!! WARNING: STIFLER CLIENT IS INSTALLED ON THIS SERVER !!!" -ForegroundColor White -BackgroundColor Red
+    Write-Host "!!! THE STIFLER CLIENT MUST BE UNINSTALLED FROM THIS SERVER !!!" -ForegroundColor White -BackgroundColor Red
+    Write-Host "=========================================================================" -ForegroundColor White -BackgroundColor Red
+    foreach ($client in $StifleRClients) {
+        Write-Host "Detected: $($client.DisplayName) | Version: $($client.DisplayVersion)" -ForegroundColor Yellow
+    }
+    Write-Warning "Uninstall the 2Pint Software StifleR Client using Installed apps / Programs and Features. Do NOT uninstall StifleR Server, Dashboards, or WmiAgent."
+    Write-Host "This script will not uninstall the client automatically." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 #Testing Specific Applications
 #$installedApps = Get-InstalledApps | Where-Object {$_.DisplayName -match "PowerShell 7"}
