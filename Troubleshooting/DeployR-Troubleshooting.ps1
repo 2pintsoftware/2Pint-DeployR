@@ -58,6 +58,7 @@ Change Log
 - 2026.11.04 - Moved InstalledApps.log and DeployR_Registry_Info.log generation to GatherTroubleShootingLogs.ps1.
 - 2026.11.04 - Added a warning when running with a PowerShell version earlier than 7.6.
 - 2026.11.19 - Added a prominent warning to uninstall the StifleR Client when detected on the server.
+- 2026.11.25 - Fixed checks that could not fail (URL and port tests, Windows features, thumbprint and StifleR URL comparisons, firewall rules, version comparisons); stopped services are only started after asking, and Sync.log is saved before the DeployR service is started; connection strings are printed without their password; added checks for Disconnected mode, downloaded runtime versions, the last content sync, the ADK folders the server reads, and certificate expiry; 2PXE and iPXE WS 4.x no longer reported for a missing HTTP.sys binding.
 
 
 #>
@@ -780,7 +781,23 @@ function Test-Url {
         $response.Close()
     }
     catch {
-        Write-Output "URL is not accessible: $Url - Error: $_"
+        # A server that answers with an error status (for example 401 or 404) was reached.
+        $webException = $_.Exception
+        if ($webException.InnerException -is [System.Net.WebException]) { $webException = $webException.InnerException }
+        if ($webException -is [System.Net.WebException] -and $webException.Response) {
+            return $true
+        }
+        # A certificate this computer does not trust, or a name that does not match: the server was reached.
+        $tlsProblem = ($webException -is [System.Net.WebException] -and $webException.Status -eq [System.Net.WebExceptionStatus]::TrustFailure)
+        for ($inner = $webException; $inner; $inner = $inner.InnerException) {
+            if ($inner -is [System.Security.Authentication.AuthenticationException]) { $tlsProblem = $true }
+        }
+        if ($tlsProblem) {
+            Write-Host "  $Url was reached, but this computer does not trust its certificate or the name does not match: $($webException.Message)" -ForegroundColor Yellow
+            return $true
+        }
+        Write-Host "  No answer from $Url - $($webException.Message)" -ForegroundColor DarkGray
+        return $false
     }
 }
 function Test-SQLConnection {
@@ -1155,6 +1172,46 @@ function Get-FreeSpaceAvailable {
         return $null
     }
 }
+function Hide-ConnectionStringSecret {
+    # Returns a database connection string with the value of Password= / Pwd= replaced by ***.
+    param([string]$ConnectionString)
+    if ([string]::IsNullOrEmpty($ConnectionString)) { return $ConnectionString }
+    $quotedOrPlain = '("[^"]*"|' + "'[^']*'" + '|[^;]*)'
+    return [regex]::Replace($ConnectionString, '(?i)(\b(?:password|pwd)\s*=\s*)' + $quotedOrPlain, '${1}***')
+}
+function Get-ServiceFileMajorVersion {
+    # Major file version of a service's program, 0 when the service or the file is not found.
+    param([string]$ServiceName)
+    try {
+        $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction Stop
+        if ($service -and $service.PathName -match '^"?(.+?\.exe)') {
+            return ([System.Diagnostics.FileVersionInfo]::GetVersionInfo($Matches[1])).FileMajorPart
+        }
+    }
+    catch { }
+    return 0
+}
+function Test-FirewallPortSpec {
+    # True when a firewall rule's port list names the port: alone, in a list or in a range. "Any" does not count.
+    param($Spec, [int]$Port)
+    foreach ($item in @($Spec)) {
+        $text = "$item".Trim()
+        if ($text -match '^\d+$' -and [int]$text -eq $Port) { return $true }
+        if ($text -match '^(\d+)-(\d+)$' -and $Port -ge [int]$Matches[1] -and $Port -le [int]$Matches[2]) { return $true }
+    }
+    return $false
+}
+function Get-DeployRInstallFolder {
+    # The DeployR install folder, from the path of the service program (<install>\WebServer\<program>.exe).
+    try {
+        $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='DeployRService'" -ErrorAction Stop
+        if ($service -and $service.PathName -match '^"?(.+?\.exe)') {
+            return (Split-Path (Split-Path $Matches[1] -Parent) -Parent)
+        }
+    }
+    catch { }
+    return $null
+}
 
 
 
@@ -1301,12 +1358,16 @@ foreach ($app in $AllPreReqApps) {
 }
 #Display App Status, Green Arrow next to Installed Apps and Red X next to Missing Apps
 
-# Deduplicate by title, prefer entries with InstallDate and the latest date
+# Deduplicate by title, prefer the highest version; without a usable version, the latest InstallDate
 $PreReqAppsStatus = $PreReqAppsStatus |
 Group-Object -Property Title |
 ForEach-Object {
+    $withVersion = $_.Group | Where-Object { "$($_.Version)" -match '^\d+(\.\d+){1,3}' }
     $withDate = $_.Group | Where-Object { $_.InstallDate }
-    if ($withDate) {
+    if ($withVersion) {
+        $withVersion | Sort-Object { [version]("$($_.Version)" -replace '^(\d+(\.\d+){1,3}).*$', '$1') } -Descending | Select-Object -First 1
+    }
+    elseif ($withDate) {
         $withDate | Sort-Object {[int]$_.InstallDate} -Descending | Select-Object -First 1
     }
     else {
@@ -1361,22 +1422,23 @@ foreach ($app in $PreReqAppsStatus) {
     }
 }
 
-#Double Check PowerShell is NOT 7.5 or above    
+#Double check that the PowerShell running this script is not older than the minimum version
 $PowerShellVersionInstalled = $PSVersionTable.PSVersion.ToString()
-if ([version]$PowerShellVersionInstalled -le [version]'7.6') {
+$PowerShellVersionRunning = [version]("{0}.{1}.{2}" -f $PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor, [math]::Max(0, $PSVersionTable.PSVersion.Patch))
+if ($PowerShellVersionRunning -lt [version]$PowerShellMinVersion) {
     Write-Host "=========================================================================" -ForegroundColor Red
-    #Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
+    Write-Host "✗ The PowerShell version running this script is older than the minimum version." -ForegroundColor Red
     Write-Host "   Installed Version: $PowerShellVersionInstalled" -ForegroundColor DarkGray
     Write-Host "   Required  Version: $PowerShellMinVersion" -ForegroundColor DarkGray
     Write-Host "=========================================================================" -ForegroundColor Red
 }
-#Double Check PowerShell is NOT 7.5 or above    
-$PowerShellVersionInstalled = $installedApps | Where-Object { $_.DisplayName -match "PowerShell 7" } | Select-Object -First 1 | ForEach-Object {
+#Double check that the installed PowerShell 7 is not older than the minimum version
+$installedApps | Where-Object { $_.DisplayName -match "PowerShell 7" } | Select-Object -First 1 | ForEach-Object {
     if ($_.DisplayVersion -match "\d+\.\d+\.\d+") {
-        if ($matches[0] -le [version]'7.6') {
+        if ([version]$matches[0] -lt [version]$PowerShellMinVersion) {
             Write-Host "=========================================================================" -ForegroundColor Red
-            #Write-Host "✗ PowerShell 7.5.X is NOT supported." -ForegroundColor Red
-            Write-Host "   Installed Version: $PowerShellVersionInstalled" -ForegroundColor DarkGray
+            Write-Host "✗ The installed PowerShell 7 is older than the minimum version." -ForegroundColor Red
+            Write-Host "   Installed Version: $($matches[0])" -ForegroundColor DarkGray
             Write-Host "   Required  Version: $PowerShellMinVersion" -ForegroundColor DarkGray
             Write-Host "=========================================================================" -ForegroundColor Red
         }
@@ -1487,8 +1549,9 @@ $RequiredWindowsComponents = @(
 "Web-Mgmt-Console"
 )
 
+$MissingComponents = @()
 foreach ($Component in $RequiredWindowsComponents) {
-    if (Get-WindowsFeature -Name $Component -ErrorAction SilentlyContinue) {
+    if ((Get-WindowsFeature -Name $Component -ErrorAction SilentlyContinue).Installed) {
         Write-Host "✓ $Component is installed." -ForegroundColor Green
     } else {
         Write-Host "✗ $Component is NOT installed." -ForegroundColor Red
@@ -1502,7 +1565,7 @@ if ($MissingComponents) {
     
 }
 
-if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
+if ((Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue).Installed) {
     Write-Host "=========================================================================" -ForegroundColor DarkGray
     Write-Host "Confirm IIS MIME Types" -ForegroundColor Cyan
     Write-Host " IIS is OPTIONAL, but if you plan to use IIS to serve the iPXE boot files, then most of these will be needed." -ForegroundColor Yellow
@@ -1583,13 +1646,19 @@ if (($Installed_Microsoft_SQL_Server) -and ($SQLServiceName)){
     }
     else {
         Write-Host "Microsoft SQL Server service is NOT running." -ForegroundColor Red
-        Write-Host " Attempting to start service..." -ForegroundColor Yellow
-        Start-Service -Name $SQLServiceName -ErrorAction SilentlyContinue
-        if ($?) {
-            Write-Host "Service started successfully." -ForegroundColor Green
+        $startService = Read-Host "Would you like to start the SQL Server service? (Y/N)"
+        if ($startService -ieq 'Y') {
+            Write-Host " Attempting to start service..." -ForegroundColor Yellow
+            Start-Service -Name $SQLServiceName -ErrorAction SilentlyContinue
+            if ($?) {
+                Write-Host "Service started successfully." -ForegroundColor Green
+            }
+            else {
+                Write-Host "Failed to start service." -ForegroundColor Red
+            }
         }
         else {
-            Write-Host "Failed to start service." -ForegroundColor Red
+            Write-Host "Service start aborted by user." -ForegroundColor Yellow
         }
         $Global:SQLServiceRunning = $false
     }
@@ -1606,15 +1675,21 @@ if ($Installed_2Pint_Software_StifleR_Server){
     }
     else {
         Write-Host "WARNING: 2Pint StifleR Server service is NOT running." -ForegroundColor Red
-        Write-Host " Attempting to start service..." -ForegroundColor Yellow
-        Start-Service -Name '2Pint Software StifleR Server' -ErrorAction SilentlyContinue
-        if ($?) {
-            Write-Host "Service started successfully." -ForegroundColor Green
-            Write-Host " Waiting for service to start additional processes..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 5
+        $startService = Read-Host "Would you like to start the StifleR Server service? (Y/N)"
+        if ($startService -ieq 'Y') {
+            Write-Host " Attempting to start service..." -ForegroundColor Yellow
+            Start-Service -Name '2Pint Software StifleR Server' -ErrorAction SilentlyContinue
+            if ($?) {
+                Write-Host "Service started successfully." -ForegroundColor Green
+                Write-Host " Waiting for service to start additional processes..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 5
+            }
+            else {
+                Write-Host "Failed to start service." -ForegroundColor Red
+            }
         }
         else {
-            Write-Host "Failed to start service." -ForegroundColor Red
+            Write-Host "Service start aborted by user." -ForegroundColor Yellow
         }
         $Global:StifleRServiceRunning = $false
     }
@@ -1632,13 +1707,33 @@ if ($Installed_2Pint_Software_DeployR){
     }
     else {
         Write-Host "2Pint DeployR service is NOT running." -ForegroundColor Red
-        Write-Host " Attempting to start service..." -ForegroundColor Yellow
-        Start-Service -Name '2Pint Software DeployR Service' -ErrorAction SilentlyContinue
-        if ($?) {
-            Write-Host "Service started successfully." -ForegroundColor Green
+        Write-Host " Starting the service runs the content sync, which writes a new Sync.log over the current one." -ForegroundColor Yellow
+        $startService = Read-Host "Would you like to start the DeployR service? (Y/N)"
+        if ($startService -ieq 'Y') {
+            # Keep the current Sync.log: it is the log that shows why the service stopped or what the last sync did.
+            try {
+                $SyncLogContentLocation = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\2Pint Software\DeployR\GeneralSettings' -ErrorAction SilentlyContinue).ContentLocation
+                if (-not $SyncLogContentLocation) { $SyncLogContentLocation = "$env:ProgramData\2Pint Software\DeployR" }
+                $SyncLogPath = Join-Path ([Environment]::ExpandEnvironmentVariables($SyncLogContentLocation)) 'Logs\Sync.log'
+                if (Test-Path -LiteralPath $SyncLogPath) {
+                    Copy-Item -LiteralPath $SyncLogPath -Destination (Join-Path $TempFolder 'Sync_before_service_start.log') -Force -ErrorAction Stop
+                    Write-Host " Saved the current Sync.log as Sync_before_service_start.log in $TempFolder" -ForegroundColor DarkGray
+                }
+            }
+            catch {
+                Write-Host " Could not save the current Sync.log: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+            Write-Host " Attempting to start service..." -ForegroundColor Yellow
+            Start-Service -Name '2Pint Software DeployR Service' -ErrorAction SilentlyContinue
+            if ($?) {
+                Write-Host "Service started successfully." -ForegroundColor Green
+            }
+            else {
+                Write-Host "Failed to start service." -ForegroundColor Red
+            }
         }
         else {
-            Write-Host "Failed to start service." -ForegroundColor Red
+            Write-Host "Service start aborted by user." -ForegroundColor Yellow
         }
         $Global:DeployRServiceRunning = $false
     }
@@ -1740,12 +1835,21 @@ if ($Installed_2Pint_Software_StifleR_Server){
     Write-Host "StifleR Using Certificate with Thumbprint: $($StifleRCertThumbprint)" -ForegroundColor Cyan
     #Get Certificate from Local Machine Store that matches
     $AllLocalCerts = Get-ChildItem -Path Cert:\LocalMachine\My
-    $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $StifleRCertThumbprint }
+    if (-not $StifleRCertThumbprint) {
+        Write-Host " WSCertificateThumbprint is not set in the StifleR registry settings." -ForegroundColor Yellow
+    }
+    $CertThumbprint = $AllLocalCerts  | Where-Object { $StifleRCertThumbprint -and $_.Thumbprint -eq $StifleRCertThumbprint }
     if ($CertThumbprint) {
         Write-Host "Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
         write-host " DNSNameList:    $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
         write-host " Subject:        $($CertThumbprint.Subject)" -ForegroundColor DarkGray
         write-host " Issuer:         $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        foreach ($FoundCert in @($CertThumbprint)) {
+            $CertDaysLeft = [int][math]::Floor(($FoundCert.NotAfter - (Get-Date)).TotalDays)
+            $CertExpiryColor = if ($CertDaysLeft -lt 0) { 'Red' } elseif ($CertDaysLeft -lt 30) { 'Yellow' } else { 'DarkGray' }
+            Write-Host " Valid until:    $($FoundCert.NotAfter.ToString('yyyy-MM-dd')) ($CertDaysLeft days left)" -ForegroundColor $CertExpiryColor
+            Write-Host " Private key:    $($FoundCert.HasPrivateKey)" -ForegroundColor ($(if ($FoundCert.HasPrivateKey) {'DarkGray'} else {'Red'}))
+        }
     }
     else {
         Write-Host "Certificate NOT found." -ForegroundColor Red
@@ -1959,8 +2063,20 @@ if ($Installed_2Pint_Software_DeployR){
     if ($DeployRRegData -and $DeployRRegData.StifleRServerApiUrl) {
         Write-Host " DeployR StifleRServerApiUrl: $($DeployRRegData.StifleRServerApiUrl)" -ForegroundColor Green
         if (($DeployRRegData.StifleRServerApiUrl) -and ($DeployRRegData.StifleRServerApiUrl)){
-            if (($DeployRRegData.StifleRServerApiUrl) -match ($DeployRRegData.StifleRServerApiUrl)){
+            $DashServiceUrl = if ($DashRegData) { "$($DashRegData.ServiceUrl)".TrimEnd('/') } else { '' }
+            $DeployRStifleRUrl = "$($DeployRRegData.StifleRServerApiUrl)".TrimEnd('/')
+            if (-not $DashServiceUrl) {
+                Write-Host " StifleR Dashboard ServiceUrl was not found in the registry; not compared with the DeployR value." -ForegroundColor Yellow
+            }
+            elseif ($DashServiceUrl -ieq $DeployRStifleRUrl) {
                 Write-Host " StifleR API URI matches in both Dashboard Registry & DeployR Registry" -foregroundColor Green
+            }
+            else {
+                Write-Host " StifleR API URI does NOT match between Dashboard Registry and DeployR Registry" -ForegroundColor Red
+                Write-Host "  Dashboard Registry URI: $($DashRegData.ServiceUrl)" -ForegroundColor DarkGray
+                Write-Host "  DeployR Registry URI: $($DeployRRegData.StifleRServerApiUrl)" -ForegroundColor DarkGray
+            }
+            if ($DeployRRegData.StifleRServerApiUrl){
                 
                 #Check if Infrasturcture Service is registered
                 $InfrastructureServiceUri = "$($DeployRRegData.StifleRServerApiUrl)/api/infrastructureService"
@@ -2022,7 +2138,7 @@ if ($Installed_2Pint_Software_DeployR){
     
     if ($DeployRRegData -and $DeployRRegData.ContentLocation) {
         Write-Host " DeployR ContentLocation: $($DeployRRegData.ContentLocation)" -ForegroundColor Green
-        $DeployRContentPath = $DeployRRegData.ContentLocation
+        $DeployRContentPath = [Environment]::ExpandEnvironmentVariables($DeployRRegData.ContentLocation)
     }
     else {
         if (Test-Path "$env:ProgramData\2Pint Software\DeployR\Content") {
@@ -2049,19 +2165,102 @@ if ($Installed_2Pint_Software_DeployR){
         }
         write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     }
+    #Check the server's own content state: Disconnected mode, downloaded runtime versions, last sync
+    Write-Host "=========================================================================" -ForegroundColor DarkGray
+    Write-Host "Checking DeployR content state..." -ForegroundColor Cyan
+    $DeployRContentRoot = if ($DeployRRegData -and $DeployRRegData.ContentLocation) { [Environment]::ExpandEnvironmentVariables($DeployRRegData.ContentLocation).TrimEnd('\') } else { "$env:ProgramData\2Pint Software\DeployR" }
+    $DeployRDisconnectedMode = "$($DeployRRegData.DisconnectedMode)" -match '^(?i:true|1)$'
+    if ($DeployRDisconnectedMode) {
+        Write-Host " Disconnected mode is ON: the server does not download the runtime files (.NET, PowerShell 7) itself." -ForegroundColor Yellow
+        Write-Host "  After every DeployR upgrade the Downloads folder must be updated by hand, or deployments stop after the first logon." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host " Disconnected mode: off" -ForegroundColor DarkGray
+    }
+    $DeployRInstallFolder = Get-DeployRInstallFolder
+    $DeployRDownloadScript = if ($DeployRInstallFolder) { Join-Path $DeployRInstallFolder 'WebServer\Scripts\Download.ps1' } else { $null }
+    $DeployRExpectedDotNet = $null
+    $DeployRExpectedPwsh = $null
+    if ($DeployRDownloadScript -and (Test-Path -LiteralPath $DeployRDownloadScript)) {
+        $DeployRDownloadText = Get-Content -LiteralPath $DeployRDownloadScript
+        $DeployRVersionLine = $DeployRDownloadText | Select-String -Pattern '^\s*\$DotNetVersion\s*=\s*"([^"]+)"' | Select-Object -First 1
+        if ($DeployRVersionLine) { $DeployRExpectedDotNet = $DeployRVersionLine.Matches[0].Groups[1].Value }
+        $DeployRVersionLine = $DeployRDownloadText | Select-String -Pattern '^\s*\$PwshVersion\s*=\s*"([^"]+)"' | Select-Object -First 1
+        if ($DeployRVersionLine) { $DeployRExpectedPwsh = $DeployRVersionLine.Matches[0].Groups[1].Value }
+    }
+    $DeployRDownloadInfoPath = Join-Path $DeployRContentRoot 'Downloads\DownloadInfo.json'
+    if (-not $DeployRExpectedDotNet -or -not $DeployRExpectedPwsh) {
+        Write-Host " Could not read the runtime versions this DeployR build expects (Download.ps1 not found); downloaded versions not compared." -ForegroundColor Yellow
+    }
+    elseif (-not (Test-Path -LiteralPath $DeployRDownloadInfoPath)) {
+        Write-Host " $DeployRDownloadInfoPath is missing: the server has no record of downloaded runtime files." -ForegroundColor Red
+        Write-Host "  This DeployR build expects .NET $DeployRExpectedDotNet and PowerShell $DeployRExpectedPwsh" -ForegroundColor DarkGray
+    }
+    else {
+        try {
+            $DeployRDownloadInfo = Get-Content -LiteralPath $DeployRDownloadInfoPath -Raw | ConvertFrom-Json
+            if ("$($DeployRDownloadInfo.DotNetVersion)" -eq $DeployRExpectedDotNet -and "$($DeployRDownloadInfo.PowerShellVersion)" -eq $DeployRExpectedPwsh) {
+                Write-Host " Downloaded runtime files match what this DeployR build expects (.NET $DeployRExpectedDotNet, PowerShell $DeployRExpectedPwsh)." -ForegroundColor Green
+            }
+            else {
+                Write-Host " Downloaded runtime files do NOT match what this DeployR build expects." -ForegroundColor Red
+                Write-Host "  Downloaded: .NET $($DeployRDownloadInfo.DotNetVersion), PowerShell $($DeployRDownloadInfo.PowerShellVersion) (last download: $($DeployRDownloadInfo.LastDownloaded))" -ForegroundColor DarkGray
+                Write-Host "  Expected:   .NET $DeployRExpectedDotNet, PowerShell $DeployRExpectedPwsh" -ForegroundColor DarkGray
+                Write-Host "  Deployed computers install these files at first logon; with the wrong versions the DeployR client does not start in Windows." -ForegroundColor DarkGray
+            }
+        }
+        catch {
+            Write-Host " Could not read $DeployRDownloadInfoPath : $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    $DeployRSyncLogPath = Join-Path $DeployRContentRoot 'Logs\Sync.log'
+    if (Test-Path -LiteralPath $DeployRSyncLogPath) {
+        $DeployRSyncLogItem = Get-Item -LiteralPath $DeployRSyncLogPath
+        if (Select-String -LiteralPath $DeployRSyncLogPath -Pattern 'All sync scripts completed' -Quiet) {
+            Write-Host " Last content sync ran to its end (Sync.log, written $($DeployRSyncLogItem.LastWriteTime))." -ForegroundColor Green
+        }
+        else {
+            Write-Host " Last content sync did NOT reach 'All sync scripts completed' (Sync.log, written $($DeployRSyncLogItem.LastWriteTime))." -ForegroundColor Red
+            Write-Host "  It stopped at an error or is still running. The last lines of $DeployRSyncLogPath show where." -ForegroundColor DarkGray
+        }
+    }
+    else {
+        Write-Host " $DeployRSyncLogPath not found: the content sync has not run." -ForegroundColor Yellow
+    }
+    #The folders of the Windows ADK that the DeployR server reads (same registry lookup as the server's scripts)
+    $DeployRKitsKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots'
+    if (-not (Test-Path $DeployRKitsKey)) { $DeployRKitsKey = 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' }
+    $DeployRKitsRoot = (Get-ItemProperty -Path $DeployRKitsKey -Name 'KitsRoot10' -ErrorAction SilentlyContinue).KitsRoot10
+    if ($DeployRKitsRoot) {
+        $DeployRAdkRoot = Join-Path $DeployRKitsRoot 'Assessment and Deployment Kit'
+        Write-Host " ADK folders the DeployR server reads ($DeployRAdkRoot):" -ForegroundColor Cyan
+        foreach ($DeployRAdkFolder in @('User State Migration Tool\amd64', 'User State Migration Tool\arm64', 'Windows Preinstallation Environment\amd64\en-us\winpe.wim', 'Deployment Tools\amd64\Oscdimg', 'Deployment Tools\amd64\DISM')) {
+            if (Test-Path -LiteralPath (Join-Path $DeployRAdkRoot $DeployRAdkFolder)) {
+                Write-Host "  ✓ $DeployRAdkFolder" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  ✗ $DeployRAdkFolder is missing" -ForegroundColor Red
+            }
+        }
+    }
+    else {
+        Write-Host " Windows ADK not found (no KitsRoot10 under Windows Kits\Installed Roots)." -ForegroundColor Red
+    }
+    write-host "-------------------------------------------------"  -ForegroundColor DarkGray
     #Check SQL Principal Rights for NT AUTHORITY\SYSTEM
     if ($Installed_Microsoft_SQL_Server -and @($SQLInstances).Count -gt 0) {
+        foreach ($SQLInstance in @($SQLInstances)) {
         Write-Host "=========================================================================" -ForegroundColor DarkGray
         Write-Host "Testing NT AUTHORITY\SYSTEM permissions on local SQL Express..." -ForegroundColor Cyan
-        $out = Test-SystemSqlPermissions -Instance $SQLInstances.ConnectionString
+        $out = Test-SystemSqlPermissions -Instance $SQLInstance.ConnectionString
         if ($out.Error) {
             Write-Host "Error: $($out.Error)" -ForegroundColor Red
             Write-Host "Please Manually Check Permissions on Database Instances" -ForegroundColor Cyan
-            Write-Host "Would you like to try to automatically add SYSTEM to the Instance $($SQLInstances.InstanceName)  (Y/N): " -ForegroundColor Yellow -NoNewline
+            Write-Host "Would you like to try to automatically add SYSTEM to the Instance $($SQLInstance.InstanceName)  (Y/N): " -ForegroundColor Yellow -NoNewline
             $response = Read-Host
             if ($response -eq 'Y' -or $response -eq 'y') {
                 try {
-                    $SetSQLPerm = Set-SqlServerPermissions -InstanceName $($SQLInstances.InstanceName)
+                    $SetSQLPerm = Set-SqlServerPermissions -InstanceName $($SQLInstance.InstanceName)
                 }
                 catch {
                     Write-Host "Failed to set permissions: $_" -ForegroundColor Red
@@ -2076,7 +2275,7 @@ if ($Installed_2Pint_Software_DeployR){
         }
         Write-Host "=========================================================================" -ForegroundColor DarkGray
         Write-Host "Checking NT AUTHORITY\SYSTEM db_owner permissions for all databases..." -ForegroundColor Cyan
-        $dbOut = Test-SqlDatabases -Instance $SQLInstances.ConnectionString
+        $dbOut = Test-SqlDatabases -Instance $SQLInstance.ConnectionString
         if ($dbOut.Error) {
             Write-Host "Error: Cannot check permissions - failed to get database list" -ForegroundColor Red
         }
@@ -2086,7 +2285,7 @@ if ($Installed_2Pint_Software_DeployR){
         else {
             # Extract database names and check permissions
             $dbNames = $dbOut.Databases | ForEach-Object { $_.Name }
-            $dbOwnerOut = Test-SystemDatabaseOwnership -Instance $SQLInstances.ConnectionString -DatabaseNames $dbNames
+            $dbOwnerOut = Test-SystemDatabaseOwnership -Instance $SQLInstance.ConnectionString -DatabaseNames $dbNames
 
             if ($dbOwnerOut.Error) {
                 Write-Host "Error: $($dbOwnerOut.Error)" -ForegroundColor Red
@@ -2105,6 +2304,7 @@ if ($Installed_2Pint_Software_DeployR){
                 }
             }
         }
+        }
     }
     else {
         Write-Host "Skipping local SQL permission checks because SQL Server is not installed on this server." -ForegroundColor DarkGray
@@ -2114,19 +2314,37 @@ if ($Installed_2Pint_Software_DeployR){
 Write-Host "=========================================================================" -ForegroundColor DarkGray
 Write-Host "Testing DB Connection Strings" -ForegroundColor Cyan
 if ($Installed_2Pint_Software_DeployR) {
+    # The product computes its connection string from SqlConnectionBy (1 = SQLite, 2 = instance and database, 3 = advanced).
+    $DeployRSqlConnectionBy = "$($DeployRRegData.SqlConnectionBy)"
+    $DeployRConnectionString = $null
     if ($DeployRRegData -and $DeployRRegData.ConnectionString) {
+        $DeployRConnectionString = $DeployRRegData.ConnectionString
+    }
+    elseif ($DeployRSqlConnectionBy -match '^(2|ServerInstanceAndDB)$') {
+        $DeployRSqlInstance = if ($DeployRRegData.ConnectionInstance) { $DeployRRegData.ConnectionInstance } else { '.\SQLExpress' }
+        $DeployRSqlDatabase = if ($DeployRRegData.ConnectionDB) { $DeployRRegData.ConnectionDB } else { 'DeployR' }
+        $DeployRConnectionString = "Server=$DeployRSqlInstance;Database=$DeployRSqlDatabase;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+    }
+    elseif ($DeployRSqlConnectionBy -match '^(3|Advanced)$') {
+        $DeployRConnectionString = $DeployRRegData.AdvancedConnectionString
+    }
+    if ($DeployRSqlConnectionBy -match '^(1|SQLite)$') {
+        Write-Host "DeployR uses SQLite (SqlConnectionBy = $DeployRSqlConnectionBy): the database is the file DeployR.db in the content location. SQL Server tests skipped." -ForegroundColor DarkGray
+    }
+    elseif ($DeployRConnectionString) {
         Write-Host "DeployR Database Connection String" -ForegroundColor DarkCyan
-        $DeployRegDataSQLServerInstanceString = (($DeployRRegData.ConnectionString).Split(';') | Where-Object { $_ -match '^Server=' }).Split('\')[1]
-        if ($DeployRegDataSQLServerInstanceString -eq $SQLInstances.InstanceName) {
-            Write-Host "  Registry SQL instance matches detected SQL instance: $($SQLInstances.InstanceName)" -ForegroundColor Green
+        $DeployRSqlServerPart = (($DeployRConnectionString -split ';') | Where-Object { $_ -match '^\s*(Server|Data Source)\s*=' } | Select-Object -First 1) -replace '^\s*(Server|Data Source)\s*=\s*', ''
+        $DeployRegDataSQLServerInstanceString = if ($DeployRSqlServerPart -match '\\(.+)$') { $Matches[1] } else { '(Default Instance)' }
+        if (@($SQLInstances.InstanceName) -contains $DeployRegDataSQLServerInstanceString) {
+            Write-Host "  Registry SQL instance matches detected SQL instance: $DeployRegDataSQLServerInstanceString" -ForegroundColor Green
         }
         else {
-            Write-Host "  Registry SQL instance does NOT match the detected local SQL instance." -ForegroundColor Red
-            Write-Host "  Registry SQL instance: $($DeployRegDataSQLServerInstanceString)" -ForegroundColor DarkGray
-            Write-Host "  Detected local SQL instance: $($SQLInstances.InstanceName)" -ForegroundColor DarkGray
+            Write-Host "  Registry SQL instance does NOT match a detected local SQL instance (normal when SQL Server is on another server)." -ForegroundColor Yellow
+            Write-Host "  Registry SQL server: $DeployRSqlServerPart" -ForegroundColor DarkGray
+            Write-Host "  Detected local SQL instance: $(@($SQLInstances.InstanceName) -join ', ')" -ForegroundColor DarkGray
         }
-        Write-Host "  Connection String: $($DeployRRegData.ConnectionString)" -ForegroundColor DarkGray
-        Test-SQLConnection -ConnectionString $DeployRRegData.ConnectionString
+        Write-Host "  Connection String: $(Hide-ConnectionStringSecret $DeployRConnectionString)" -ForegroundColor DarkGray
+        Test-SQLConnection -ConnectionString $DeployRConnectionString
     }
     else {
         Write-Host "DeployR database connection string is not configured." -ForegroundColor Yellow
@@ -2152,7 +2370,7 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
                     $iPXEWSConnectionStringFound = $true
                     Write-Host "iPXE Anywhere Web Service Database Connection String" -ForegroundColor DarkCyan
                     Write-Host "  Registry Setting: $($regItem.Path)::$($regItem.ValueName)" -ForegroundColor DarkGray
-                    Write-Host "  Connection String: $candidateConnectionString" -ForegroundColor DarkGray
+                    Write-Host "  Connection String: $(Hide-ConnectionStringSecret $candidateConnectionString)" -ForegroundColor DarkGray
                     Test-SQLConnection -ConnectionString $candidateConnectionString
                 }
             }
@@ -2171,12 +2389,21 @@ if ($Installed_2Pint_Software_DeployR) {
     $CertThumbprintRegValue = $DeployRRegData.CertificateThumbprint
     Write-Host "DeployR Using Certificate with Thumbprint: $($CertThumbprintRegValue)" -ForegroundColor Cyan
     #Get Certificate from Local Machine Store that matches
-    $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My  | Where-Object { $_.Thumbprint -match $CertThumbprintRegValue }
+    if (-not $CertThumbprintRegValue) {
+        Write-Host "  CertificateThumbprint is not set (CertificateLocateBy = '$($DeployRRegData.CertificateLocateBy)', CertificateSubjectName = '$($DeployRRegData.CertificateSubjectName)')." -ForegroundColor Yellow
+    }
+    $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\My  | Where-Object { $CertThumbprintRegValue -and $_.Thumbprint -eq $CertThumbprintRegValue }
     if ($CertThumbprint) {
         Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
         Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
         Write-Host "  Subject:       $($CertThumbprint.Subject)" -ForegroundColor DarkGray
         Write-Host "  Issuer:        $($CertThumbprint.Issuer)" -ForegroundColor DarkGray
+        foreach ($FoundCert in @($CertThumbprint)) {
+            $CertDaysLeft = [int][math]::Floor(($FoundCert.NotAfter - (Get-Date)).TotalDays)
+            $CertExpiryColor = if ($CertDaysLeft -lt 0) { 'Red' } elseif ($CertDaysLeft -lt 30) { 'Yellow' } else { 'DarkGray' }
+            Write-Host "  Valid until:   $($FoundCert.NotAfter.ToString('yyyy-MM-dd')) ($CertDaysLeft days left)" -ForegroundColor $CertExpiryColor
+            Write-Host "  Private key:   $($FoundCert.HasPrivateKey)" -ForegroundColor ($(if ($FoundCert.HasPrivateKey) {'DarkGray'} else {'Red'}))
+        }
     }
     else {
         Write-Host "  Certificate NOT found." -ForegroundColor Red
@@ -2194,39 +2421,59 @@ if ($Installed_2Pint_Software_DeployR) {
     
     
     
-    Write-Host " Testing StifleR Server URL... $($StifleRServerURL)" -ForegroundColor Green
-    $StifleRTest = Test-Url -Url $StifleRServerURL
+    # The URLs are tested with their port; the port tests read TcpTestSucceeded and report failures too.
+    $StifleRServerFullURL = $DeployRRegData.StifleRServerApiUrl
+    $DeployRFullURL = $DeployRRegData.ClientURL
+    $DeployRHttpsPort = if ("$($DeployRRegData.HttpsPort)" -match '^\d+$' -and [int]$DeployRRegData.HttpsPort -gt 0) { [int]$DeployRRegData.HttpsPort } else { 7281 }
+    $DeployRHttpPort = if ("$($DeployRRegData.HttpPort)" -match '^\d+$') { [int]$DeployRRegData.HttpPort } else { 0 }
+
+    Write-Host " Testing StifleR Server URL... $($StifleRServerFullURL)" -ForegroundColor Green
+    $StifleRTest = Test-Url -Url $StifleRServerFullURL
     if ($StifleRTest) {
         Write-Host "  StifleR Server URL is accessible." -ForegroundColor DarkGray
-        $Test443 = Test-NetConnection -ComputerName $StifleRServerName -Port 443
-        if ($Test443) {
-            Write-Host "  StifleR Server Port 443 is accessible." -ForegroundColor DarkGray
-        }
-        $Test9000 = Test-NetConnection -ComputerName $StifleRServerName -Port 9000
-        if ($Test9000) {
-            Write-Host "  StifleR Server Port 9000 is accessible." -ForegroundColor DarkGray
-        }
     }
     else {
         Write-Host "StifleR Server URL is NOT accessible." -ForegroundColor Red
     }
-    Write-Host " Testing DeployR Server URL... $($DeployRURL)" -ForegroundColor Green
-    $DeployRTest = Test-Url -Url $DeployRURL
+    $Test9000 = Test-NetConnection -ComputerName $StifleRServerName -Port 9000 -WarningAction SilentlyContinue
+    if ($Test9000.TcpTestSucceeded) {
+        Write-Host "  StifleR Server Port 9000 is accessible." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "  StifleR Server Port 9000 is NOT accessible." -ForegroundColor Red
+    }
+    $Test443 = Test-NetConnection -ComputerName $StifleRServerName -Port 443 -WarningAction SilentlyContinue
+    if ($Test443.TcpTestSucceeded) {
+        Write-Host "  StifleR Server Port 443 is accessible." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "  StifleR Server Port 443 is not accessible (only needed when IIS serves the dashboard or boot files)." -ForegroundColor Yellow
+    }
+    Write-Host " Testing DeployR Server URL... $($DeployRFullURL)" -ForegroundColor Green
+    $DeployRTest = Test-Url -Url $DeployRFullURL
     if ($DeployRTest) {
-        
-        
-        
-        $Test7281 = Test-NetConnection -ComputerName $DeployRServerName -Port 7281
-        if ($Test7281) {
-            Write-Host "  DeployR Server Port 7281 is accessible." -ForegroundColor DarkGray
-        }
-        $Test7282 = Test-NetConnection -ComputerName $DeployRServerName -Port 7282
-        if ($Test7282) {
-            Write-Host "  DeployR Server Port 7282 is accessible." -ForegroundColor DarkGray
-        }
+        Write-Host "  DeployR Server URL is accessible." -ForegroundColor DarkGray
     }
     else {
         Write-Host "  DeployR Server URL is NOT accessible." -ForegroundColor Red
+    }
+    $Test7281 = Test-NetConnection -ComputerName $DeployRServerName -Port $DeployRHttpsPort -WarningAction SilentlyContinue
+    if ($Test7281.TcpTestSucceeded) {
+        Write-Host "  DeployR Server Port $DeployRHttpsPort is accessible." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "  DeployR Server Port $DeployRHttpsPort is NOT accessible." -ForegroundColor Red
+    }
+    # The DeployR server only listens on an HTTP port when HttpPort is set (default 0 = off).
+    # Port 7282 is the DeployR client's own local port, not a server port.
+    if ($DeployRHttpPort -gt 0) {
+        $Test7282 = Test-NetConnection -ComputerName $DeployRServerName -Port $DeployRHttpPort -WarningAction SilentlyContinue
+        if ($Test7282.TcpTestSucceeded) {
+            Write-Host "  DeployR Server Port $DeployRHttpPort (HTTP) is accessible." -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "  DeployR Server Port $DeployRHttpPort (HTTP) is NOT accessible." -ForegroundColor Red
+        }
     }
     
 }
@@ -2266,7 +2513,7 @@ if ($certHash) {
     Write-Host "Certificate Thumbprint for HTTPS (port 9000 - StifleR): $certHash" -ForegroundColor Cyan
     if ($certHash -eq $CertThumbprintRegValue) {
         Write-Host "  The certificate hash matches the DeployR configuration." -ForegroundColor Green
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -eq $certHash }
         if ($CertThumbprint) {
             Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
             Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -2279,7 +2526,7 @@ if ($certHash) {
     }
     else {
         Write-Host "  The certificate hash does NOT match the DeployR configuration." -ForegroundColor Red
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $certHash }
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -eq $certHash }
         if ($CertThumbprint) {
             Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
             Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -2311,7 +2558,7 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
     if ($iPXEcertHash) {
         Write-Host "Certificate Thumbprint for HTTPS (port 8051 - iPXE WS): $iPXEcertHash" -ForegroundColor Cyan
         
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $iPXEcertHash }
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -eq $iPXEcertHash }
         if ($CertThumbprint) {
             Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
             Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -2322,8 +2569,7 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
             Write-Host "  Certificate NOT found." -ForegroundColor Red
         }
     }
-    
-} else {
+    else {
     Write-Host "No SSL binding found for port 8051. Trying all IPs..." -ForegroundColor Yellow
     # Fallback: Scan common IPs (adjust as needed)
     $ips = @("0.0.0.0", "*")  # Add specific IPs if known, e.g., "192.168.1.100"
@@ -2336,8 +2582,15 @@ if ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true) {
             break
         }
     }
-    if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
-    
+    if (-not $found) {
+        if ((Get-ServiceFileMajorVersion -ServiceName 'iPXEWS') -ge 4) {
+            Write-Host "No binding found. That is expected: iPXE Anywhere Web Service 4.x does not use an HTTP.sys binding." -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "No binding found." -ForegroundColor Red
+        }
+    }
+    }
 }
 
 if ($Installed_2Pint_Software_PXE_Server -eq $true){
@@ -2347,7 +2600,7 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
     if ($2PXEcertHash) {
         Write-Host "Certificate Thumbprint for HTTPS (port 8050 - 2PXE): $2PXEcertHash" -ForegroundColor Cyan
         
-        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -match $2PXEcertHash }
+        $CertThumbprint = $AllLocalCerts  | Where-Object { $_.Thumbprint -eq $2PXEcertHash }
         if ($CertThumbprint) {
             Write-Host "  Found certificate in local store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
             Write-Host "  DNSNameList:   $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -2370,7 +2623,14 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
                 break
             }
         }
-        if (-not $found) { Write-Host "No binding found." -ForegroundColor Red }
+        if (-not $found) {
+            if ((Get-ServiceFileMajorVersion -ServiceName '2PXE') -ge 4) {
+                Write-Host "No binding found. That is expected: 2PXE 4.x does not use an HTTP.sys binding." -ForegroundColor DarkGray
+            }
+            else {
+                Write-Host "No binding found." -ForegroundColor Red
+            }
+        }
     }
 }
 if (($Installed_2Pint_Software_PXE_Server -eq $true) -and ($Installed_2Pint_Software_iPXE_Anywhere_WebService -eq $true)){
@@ -2419,7 +2679,7 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
         if ($2PXEConfigCustomCAThumbprint) {
             Write-Host "  CustomCAThumbprint: $2PXEConfigCustomCAThumbprint" -ForegroundColor DarkGray
             #Get the certificate from the local store that matches the thumbprint in the Trusted Root Certification Authorities store
-            $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\Root  | Where-Object { $_.Thumbprint -match $2PXEConfigCustomCAThumbprint }
+            $CertThumbprint = Get-ChildItem -Path Cert:\LocalMachine\Root  | Where-Object { $_.Thumbprint -eq $2PXEConfigCustomCAThumbprint }
             if ($CertThumbprint) {
                 Write-Host "  Found Custom CA certificate in local Trusted Root store: $($CertThumbprint.Thumbprint)" -ForegroundColor Green
                 Write-Host "    DNSNameList: $($CertThumbprint.DNSNameList -join ', ')" -ForegroundColor DarkGray
@@ -2433,6 +2693,10 @@ if ($Installed_2Pint_Software_PXE_Server -eq $true){
         else{
             #Write-Host "2PXE Config Missing Value for CustomCAThumbprint" -ForegroundColor Red
         }
+    }
+    else {
+        Write-Host "2PXE config file not found: $2PXEConfigFilePath" -ForegroundColor Yellow
+        Write-Host "  2PXE 4.x keeps its settings in the registry (HKLM\SOFTWARE\2Pint Software\2PXE); the config file checks were skipped." -ForegroundColor DarkGray
     }
 }
 #Testing Firewall Rules:
@@ -2462,18 +2726,46 @@ else {
     Write-Host "Unable to determine Windows Firewall profile status." -ForegroundColor Yellow
 }
 
-$Ports = Get-NetFirewallPortFilter
-$InboundRules = Get-NetFirewallRule -Direction Inbound
+# Use the ports the DeployR service is set to (HttpsPort, default 7281; HttpPort, default 0 = off).
+# 7282 is the DeployR client's own local port, not a server port, so HTTP is only checked when HttpPort is set.
+$DeployRFwHttpsPort = 7281
+$DeployRFwHttpPort = 0
+if ($DeployRRegData) {
+    if ("$($DeployRRegData.HttpsPort)" -match '^\d+$' -and [int]$DeployRRegData.HttpsPort -gt 0) { $DeployRFwHttpsPort = [int]$DeployRRegData.HttpsPort }
+    if ("$($DeployRRegData.HttpPort)" -match '^\d+$') { $DeployRFwHttpPort = [int]$DeployRRegData.HttpPort }
+}
+$DeployRFirewallRules = @(
+[PSCustomObject]@{DisplayName = "2Pint DeployR HTTPS $DeployRFwHttpsPort"; Port = $DeployRFwHttpsPort; Protocol = 'TCP'}
+[PSCustomObject]@{DisplayName = "2Pint DeployR HTTP/3 (QUIC) $DeployRFwHttpsPort - optional"; Port = $DeployRFwHttpsPort; Protocol = 'UDP'; Optional = $true}
+)
+if ($DeployRFwHttpPort -gt 0) {
+    $DeployRFirewallRules += [PSCustomObject]@{DisplayName = "2Pint DeployR HTTP $DeployRFwHttpPort"; Port = $DeployRFwHttpPort; Protocol = 'TCP'}
+}
+$FirewallRules = $DeployRFirewallRules + @($FirewallRules | Where-Object { $_.DisplayName -notmatch '^2Pint DeployR ' })
+
+# Read the active policy (local rules and rules from Group Policy). The port filters are asked for through
+# the inbound rules, so a filter always belongs to an inbound rule. Only enabled allow rules count, and a
+# rule counts when it names the port alone, in a list or in a range.
+$InboundRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -ErrorAction SilentlyContinue)
+$Ports = @{}
+foreach ($PortFilter in @($InboundRules | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue)) { $Ports[$PortFilter.InstanceID] = $PortFilter }
 foreach ($FirewallRule in $FirewallRules){
     Write-Host "Checking Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor DarkCyan
-    $RulePorts = $Ports | Where-Object { $_.LocalPort -eq $FirewallRule.Port -and $_.Protocol -eq $FirewallRule.Protocol } | Select-Object -first 1
-    if ($RulePorts){
-        foreach ($Port in $RulePorts){
-            $NetFirewallRule = $InboundRules | Where-Object { $_.InstanceID -eq $Port.InstanceID }
+    $MatchingRules = @($InboundRules | Where-Object {
+        $_.Enabled -eq 'True' -and $_.Action -eq 'Allow' -and $Ports.ContainsKey($_.InstanceID) -and
+        $Ports[$_.InstanceID].Protocol -eq $FirewallRule.Protocol -and
+        (Test-FirewallPortSpec -Spec $Ports[$_.InstanceID].LocalPort -Port $FirewallRule.Port)
+    })
+    if ($MatchingRules.Count -gt 0){
+        foreach ($NetFirewallRule in $MatchingRules){
+            $Port = $Ports[$NetFirewallRule.InstanceID]
             Write-Host " Found Firewall Rule: $($NetFirewallRule.DisplayName)" -ForegroundColor Green
-            Write-Host "  Enabled: $($NetFirewallRule.Enabled) | Action:  $($NetFirewallRule.Action) | Profile: $($NetFirewallRule.Profile)" -ForegroundColor DarkGray
-            Write-Host "  Port: $($Port.LocalPort) | Protocol: $($Port.Protocol)" -ForegroundColor DarkGray
+            Write-Host "  Enabled: $($NetFirewallRule.Enabled) | Action:  $($NetFirewallRule.Action) | Profile: $($NetFirewallRule.Profile) | Source: $($NetFirewallRule.PolicyStoreSourceType)" -ForegroundColor DarkGray
+            Write-Host "  Port: $($Port.LocalPort -join ',') | Protocol: $($Port.Protocol)" -ForegroundColor DarkGray
         }
+    }
+    elseif ($FirewallRule.PSObject.Properties.Name -contains 'Optional' -and $FirewallRule.Optional) {
+        Write-Host "No enabled inbound allow rule found for: $($FirewallRule.DisplayName)" -ForegroundColor Yellow
     }
     else {
         Write-Host "No matching ports found for Firewall Rule: $($FirewallRule.DisplayName)" -ForegroundColor Red
@@ -2545,7 +2837,7 @@ if ($MissingComponents) {
         Write-Host "Add-WindowsFeature $($MissingComponents -join ', ')" -ForegroundColor DarkGray
     }
 }
-if (Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue) {
+if ((Get-WindowsFeature -Name 'Web-Server' -ErrorAction SilentlyContinue).Installed) {
     if ($IISVirtualDirMissing) {
         Write-Host "=========================================================================" -ForegroundColor DarkGray
         Write-Host "Running Remediation for StifleRDashboard virtual directory"
